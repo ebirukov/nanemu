@@ -1,0 +1,4 @@
+github.com/cavaliergopher/cpio v1.0.1 h1:KQFSeKmZhv0cr+kawA3a0xTQCU4QxXF1vhU7P7av2KM=
+github.com/cavaliergopher/cpio v1.0.1/go.mod h1:pBdaqQjnvXxdS/6CvNDwIANIFSP0xRKI16PX4xejRQc=
+github.com/ebirukov/bstrace v0.0.0-20250821165043-954e12488ec3 h1:HXXXPP2PIzHOMrDW5hyf7q7j92YPUO98jzpybcHiuEY=
+github.com/ebirukov/bstrace v0.0.0-20250821165043-954e12488ec3/go.mod h1:Cf2lwmz/SOnQsvDzQoUXbsLGXVMoaxkXgU4lnIiEuic=
