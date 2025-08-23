@@ -35,7 +35,7 @@ import (
 // Parameters:
 //
 //	out     - io.Writer destination for the CPIO archive data
-//	rootDir - path to the root directory to archive
+//	root 	- path to the root directory to archive
 //
 // Returns:
 //
@@ -50,49 +50,66 @@ import (
 // - Special files (devices, sockets etc.) are skipped
 // - File ownership is preserved from the source filesystem
 // - Uses standard CPIO newc format for maximum compatibility
-func Create(out io.Writer, rootDir string) error {
-	if _, err := os.Stat(rootDir); os.IsNotExist(err) {
-		return fmt.Errorf("root does not exist: %s", rootDir)
+func Create(out io.Writer, root string) error {
+	info, err := os.Stat(root)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("root does not exist: %s", root)
+	}
+	if err != nil {
+		return err
 	}
 
 	archive := cpio.NewWriter(out)
 	defer archive.Close()
 
-	return filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+	if !info.IsDir() {
+		// root is single file
+		return addFileToArchive(archive, filepath.Dir(root), root, info)
+	}
+
+	return filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		name, err := filepath.Rel(rootDir, path)
-		if err != nil {
-			return err
-		}
-		if name == "." {
-			return nil
-		}
-
-		hdr, err := cpio.FileInfoHeader(info, name)
-		if err != nil {
-			return err
-		}
-		hdr.Name = name
-
-		if err := archive.WriteHeader(hdr); err != nil {
-			return err
-		}
-
-		if info.Mode().IsRegular() {
-			file, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-
-			if _, err := io.Copy(archive, file); err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return addFileToArchive(archive, root, path, fi)
 	})
+}
+
+func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo) error {
+	name, err := filepath.Rel(dir, path)
+	if err != nil {
+		return err
+	}
+	// skip root
+	if name == "." {
+		return nil
+	}
+
+	hdr, err := cpio.FileInfoHeader(info, name)
+	if err != nil {
+		return err
+	}
+	hdr.Name = name
+
+	if err := archive.WriteHeader(hdr); err != nil {
+		return err
+	}
+
+	if info.Mode().IsDir() {
+		return nil
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	if _, err := io.Copy(archive, file); err != nil {
+		return err
+	}
+
+	return nil
 }
