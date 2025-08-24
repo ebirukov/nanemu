@@ -4,14 +4,15 @@ import "time"
 
 const DefaultExecTimeout = 10 * time.Second
 const KernelArgs = "KERNEL_ARGS"
+const PanicMsg = "Kernel panic"
 
 var (
 	defaultQemuArgs = map[string]string{
-		"amd64": "-enable-kvm -nodefaults -serial mon:stdio -display none -no-reboot",
-		"arm64": "-nodefaults -serial mon:stdio -machine virt -cpu cortex-a53 -nographic -no-reboot",
+		"amd64": "-serial mon:stdio -machine pc -cpu max -display none",
+		"arm64": "-serial mon:stdio -machine virt -cpu cortex-a53 -display none",
 	}
 	defaultKernelArgs = map[string]string{
-		"amd64": "console=ttyS0 quiet",
-		"arm64": "console=ttyAMA0 cma=0 audit=0 nosmp maxcpus=1 ipv6.disable=1 net.ifnames=0 lsm= acpi=off ima_appraise=off quiet",
+		"amd64": "console=ttyS0",
+		"arm64": "console=ttyAMA0",
 	}
 )

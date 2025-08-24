@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ebirukov/nanemu/internal/text"
 	"github.com/ebirukov/nanemu/pkg/cpio"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -15,11 +17,13 @@ import (
 type App struct {
 	config     *Config
 	qemuArgs   []string
+	qemuCmd    *exec.Cmd
 	ctx        context.Context
 	cancel     context.CancelFunc
 	stopSig    chan os.Signal
 	stop       chan struct{}
 	onShutdown []func(app *App) error
+	err        error
 }
 
 func NewApp() *App {
@@ -61,26 +65,24 @@ func (app *App) Init() (err error) {
 }
 
 func (app *App) shutdown() {
-	log.Printf("start shutdown app")
 	for _, shutdown := range app.onShutdown {
 		if err := shutdown(app); err != nil {
 			log.Printf("WARNING: shutdown app failed: %v", err)
 		}
 	}
-	log.Printf("shutdown app complete")
+}
+
+func (app *App) HandleKernelPanic(mention string) {
+	app.qemuCmd.Process.Signal(syscall.SIGINT)
+
+	app.err = fmt.Errorf("kernel panic: %s", mention)
+}
+
+func (app *App) ExecuteError() error {
+	return app.err
 }
 
 func (app *App) Run() error {
-	go func() {
-		select {
-		case <-app.ctx.Done():
-		case <-app.stopSig:
-		}
-
-		app.shutdown()
-		close(app.stop)
-	}()
-
 	defer func() {
 		app.cancel()
 		<-app.stop
@@ -91,19 +93,47 @@ func (app *App) Run() error {
 
 	signal.Notify(app.stopSig, os.Interrupt, syscall.SIGTERM)
 
-	cmd := exec.CommandContext(app.ctx, app.config.QemuBin, app.qemuArgs...)
+	app.qemuCmd = exec.CommandContext(app.ctx, app.config.QemuBin, app.qemuArgs...)
 
-	cmd.Stdout, cmd.Stderr = log.Writer(), log.Writer()
+	go func() {
+		select {
+		case <-app.ctx.Done():
+		case sig := <-app.stopSig:
+			app.qemuCmd.Process.Signal(sig)
+		}
 
-	log.Printf("executing: %v", cmd)
+		app.shutdown()
+		close(app.stop)
+	}()
 
-	if err := cmd.Start(); err != nil {
-		log.Fatalf("could not start process: %v", err)
+	app.qemuCmd.SysProcAttr = &syscall.SysProcAttr{
+		Pdeathsig: syscall.SIGTERM,
 	}
 
-	proc := cmd.Process
+	app.qemuCmd.Stderr = os.Stderr
 
-	log.Printf("process %v started with pid: %d", cmd.Path, proc.Pid)
+	cmdStdOut, err := app.qemuCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("can't get stdout pipe: %w", err)
+	}
+
+	defer cmdStdOut.Close()
+
+	if app.config.FailOnPanic {
+		cmdStdOut = io.NopCloser(text.NewLineMatchReader(cmdStdOut, PanicMsg, app.HandleKernelPanic))
+	}
+
+	go io.Copy(log.Writer(), cmdStdOut)
+
+	log.Printf("executing: %v", app.qemuCmd)
+
+	if err := app.qemuCmd.Start(); err != nil {
+		return fmt.Errorf("could not start process: %v", err)
+	}
+
+	proc := app.qemuCmd.Process
+
+	log.Printf("process %v started with pid: %d", app.qemuCmd.Path, proc.Pid)
 
 	state, err := proc.Wait()
 	if err != nil {
@@ -114,22 +144,14 @@ func (app *App) Run() error {
 	case syscall.WaitStatus:
 		if state.Signaled() {
 			if errors.Is(app.ctx.Err(), context.DeadlineExceeded) {
-				log.Printf("process %d terminated by timeout", proc.Pid)
-				return nil
+				return fmt.Errorf("process %s [%d] terminated by timeout. For more details to use qemu arg '-serial mon:stdio'", app.qemuCmd, proc.Pid)
 			}
 
-			log.Printf("process %d terminated with signal: %s", proc.Pid, state.Signal())
-			return nil
+			return fmt.Errorf("process %s [%d] terminated by signal: %s", app.qemuCmd, proc.Pid, state.Signal())
 		}
 	}
 
-	if state.Success() {
-		log.Printf("process %d complete with code %d", proc.Pid, state.ExitCode())
-
-		return nil
-	}
-
-	log.Printf("%d exit with code: %d", proc.Pid, state.ExitCode())
+	log.Printf("exit with code: %d", state.ExitCode())
 
 	return nil
 }

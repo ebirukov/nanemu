@@ -18,7 +18,7 @@ type Config struct {
 	KernelPath  string
 	RootFSPath  string
 	ExecTimeout time.Duration
-	KernelTrace bool
+	FailOnPanic bool
 
 	initrdFile string
 }
@@ -33,7 +33,7 @@ func (cfg *Config) Parse(args []string) error {
 	fs.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
 	fs.StringVar(&cfg.KernelPath, "kernel", "", "Path to linux kernel image")
 	fs.StringVar(&cfg.RootFSPath, "rootfs", "", "Path to initramfs root directory")
-	fs.BoolVar(&cfg.KernelTrace, "ktrace", false, "Print kernel trace messages")
+	fs.BoolVar(&cfg.FailOnPanic, "fail-on-prace", true, "Fail on kernel panic")
 	fs.DurationVar(&cfg.ExecTimeout, "timeout", DefaultExecTimeout, "Max time of qemu execution")
 
 	if err := fs.Parse(args[1:]); err != nil {
@@ -59,14 +59,26 @@ func (cfg *Config) Parse(args []string) error {
 	return nil
 }
 
+func hasFieldPrefix(fields []string, prefix string) bool {
+	for _, f := range fields {
+		if strings.Contains(f, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (cfg *Config) BuildCmdArgs() ([]string, error) {
-	if cfg.KernelTrace {
-		cfg.KernelArgs += " kerneltrace=true"
+	kernelArgs := strings.Fields(cfg.KernelArgs)
+	// add console UART for inspect kernel dmesg write to stdout
+	if cfg.FailOnPanic && !hasFieldPrefix(kernelArgs, "console=") {
+		kernelArgs = append(kernelArgs, defaultKernelArgs[cfg.Arch])
 	}
 
 	vmArgs := strings.Fields(cfg.QemuCfgArgs)
 	vmArgs = append(vmArgs,
-		"-append", cfg.KernelArgs,
+		"-append", strings.Join(kernelArgs, " "),
 		"-kernel", cfg.KernelPath,
 		"-initrd", cfg.initrdFile)
 
