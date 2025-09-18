@@ -78,3 +78,28 @@ func (lmr *LineMatchReader) Read(p []byte) (int, error) {
 	// Возвращаем данные из буфера
 	return lmr.buf.Read(p)
 }
+
+// WriteTo позволяет писать напрямую, минуя промежуточный буфер (при использовании io.Copy)
+func (lmr *LineMatchReader) WriteTo(w io.Writer) (int64, error) {
+	var total int64
+	for {
+		line, err := lmr.br.ReadString('\n')
+		if len(line) > 0 {
+			trimmed := strings.TrimRight(line, "\r\n")
+			if strings.Contains(trimmed, lmr.substr) {
+				lmr.onMatch(trimmed)
+			}
+			n, werr := io.WriteString(w, line)
+			total += int64(n)
+			if werr != nil {
+				return total, werr
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				return total, nil
+			}
+			return total, err
+		}
+	}
+}

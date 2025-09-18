@@ -31,9 +31,9 @@ func (cfg *Config) Parse(args []string) error {
 	fs := flag.NewFlagSet(filepath.Base(args[0]), flag.ExitOnError)
 
 	fs.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
-	fs.StringVar(&cfg.KernelPath, "kernel", "", "Path to linux kernel image")
+	fs.StringVar(&cfg.KernelPath, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image")
 	fs.StringVar(&cfg.RootFSPath, "rootfs", "", "Path to initramfs root directory")
-	fs.BoolVar(&cfg.FailOnPanic, "fail-on-prace", true, "Fail on kernel panic")
+	fs.BoolVar(&cfg.FailOnPanic, "fail-on-panic", true, "Fail on kernel panic")
 	fs.DurationVar(&cfg.ExecTimeout, "timeout", DefaultExecTimeout, "Max time of qemu execution")
 
 	if err := fs.Parse(args[1:]); err != nil {
@@ -76,7 +76,19 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		kernelArgs = append(kernelArgs, defaultKernelArgs[cfg.Arch])
 	}
 
+	info, _ := os.Stat(cfg.RootFSPath)
+	if !info.IsDir() {
+		kernelArgs = append(kernelArgs, "rdinit="+filepath.Base(cfg.RootFSPath))
+	}
+
 	vmArgs := strings.Fields(cfg.QemuCfgArgs)
+	switch runtime.GOOS {
+	case "darwin":
+		vmArgs = append(vmArgs, "-accel", "hvf")
+	case "linux":
+		vmArgs = append(vmArgs, "-enable-kvm")
+	}
+
 	vmArgs = append(vmArgs,
 		"-append", strings.Join(kernelArgs, " "),
 		"-kernel", cfg.KernelPath,
