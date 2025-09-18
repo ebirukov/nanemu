@@ -82,11 +82,15 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	}
 
 	vmArgs := strings.Fields(cfg.QemuCfgArgs)
-	switch runtime.GOOS {
-	case "darwin":
-		vmArgs = append(vmArgs, "-accel", "hvf")
-	case "linux":
-		vmArgs = append(vmArgs, "-enable-kvm")
+
+	// accelerate hypervisor by default
+	if cfg.Arch == runtime.GOARCH {
+		switch runtime.GOOS {
+		case "darwin":
+			vmArgs = append(vmArgs, "-accel", "hvf")
+		case "linux":
+			vmArgs = append(vmArgs, "-enable-kvm")
+		}
 	}
 
 	vmArgs = append(vmArgs,
