@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -125,15 +126,13 @@ func (app *App) Run() error {
 
 	go io.Copy(log.Writer(), cmdStdOut)
 
-	log.Printf("executing: %v", app.qemuCmd)
+	printCmd(app.qemuCmd)
 
 	if err := app.qemuCmd.Start(); err != nil {
 		return fmt.Errorf("could not start process: %v", err)
 	}
 
 	proc := app.qemuCmd.Process
-
-	log.Printf("process %v started with pid: %d", app.qemuCmd.Path, proc.Pid)
 
 	state, err := proc.Wait()
 	if err != nil {
@@ -154,4 +153,15 @@ func (app *App) Run() error {
 	log.Printf("exit with code: %d", state.ExitCode())
 
 	return nil
+}
+
+func printCmd(cmd *exec.Cmd) {
+	var b strings.Builder
+	b.WriteString(cmd.Path)
+	for _, a := range cmd.Args[1:] {
+		b.WriteByte('\t')
+		b.WriteString(a)
+	}
+
+	log.Printf("start: %v", b.String())
 }
