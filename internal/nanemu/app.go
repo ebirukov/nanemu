@@ -159,7 +159,7 @@ func printCmd(cmd *exec.Cmd) {
 	var b strings.Builder
 	b.WriteString(cmd.Path)
 	for _, a := range cmd.Args[1:] {
-		b.WriteByte('\t')
+		b.WriteByte('\n')
 		b.WriteString(a)
 	}
 
