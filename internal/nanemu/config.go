@@ -77,7 +77,7 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	}
 
 	info, _ := os.Stat(cfg.RootFSPath)
-	if !info.IsDir() {
+	if !info.IsDir() && !hasFieldPrefix(kernelArgs, "rdinit=") {
 		kernelArgs = append(kernelArgs, "rdinit="+filepath.Base(cfg.RootFSPath))
 	}
 

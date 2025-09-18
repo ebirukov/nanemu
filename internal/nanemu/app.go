@@ -161,8 +161,8 @@ func printCmd(cmd *exec.Cmd) {
 	for _, a := range cmd.Args[1:] {
 		if strings.HasPrefix(a, "-") {
 			b.WriteByte('\n')
-			b.WriteByte('\t')
 		}
+		b.WriteByte('\t')
 		b.WriteString(a)
 	}
 
