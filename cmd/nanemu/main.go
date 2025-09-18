@@ -10,12 +10,14 @@ import (
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		if info, err := buildinfo.ReadFile(os.Args[0]); err == nil {
-			fmt.Printf("Version: %s\n", info.Main.Version)
-			return
+		info, err := buildinfo.ReadFile(os.Args[0])
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		os.Exit(0)
+		fmt.Printf("Version: %s\n", info.Main.Version)
+
+		return
 	}
 
 	app := nanemu.NewApp()
