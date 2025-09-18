@@ -10,7 +10,12 @@ import (
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		info, err := buildinfo.ReadFile(os.Args[0])
+		path, err := os.Executable()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		info, err := buildinfo.ReadFile(path)
 		if err != nil {
 			log.Fatal(err)
 		}
