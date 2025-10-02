@@ -19,6 +19,10 @@ type Config struct {
 	RootFSPath  string
 	ExecTimeout time.Duration
 	FailOnPanic bool
+	Loglevel    string
+
+	Memory string
+	Smp    string
 
 	initrdFile string
 }
@@ -35,6 +39,9 @@ func (cfg *Config) Parse(args []string) error {
 	fs.StringVar(&cfg.RootFSPath, "rootfs", "", "Path to initramfs root directory")
 	fs.BoolVar(&cfg.FailOnPanic, "fail-on-panic", true, "Fail on kernel panic")
 	fs.DurationVar(&cfg.ExecTimeout, "timeout", DefaultExecTimeout, "Max time of qemu execution")
+	fs.StringVar(&cfg.Memory, "memory", "", "Memory limit")
+	fs.StringVar(&cfg.Smp, "smp", "", "Cpus limit")
+	fs.StringVar(&cfg.Loglevel, "loglevel", "", "kernel log level")
 
 	if err := fs.Parse(args[1:]); err != nil {
 		return fmt.Errorf("can't parse command flags: %w", err)
@@ -69,6 +76,16 @@ func hasFieldPrefix(fields []string, prefix string) bool {
 	return false
 }
 
+func hasField(fields []string, prefix string) bool {
+	for _, f := range fields {
+		if strings.EqualFold(f, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	kernelArgs := strings.Fields(cfg.KernelArgs)
 	// add console UART for inspect kernel dmesg write to stdout
@@ -76,12 +93,24 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		kernelArgs = append(kernelArgs, defaultKernelArgs[cfg.Arch])
 	}
 
+	if cfg.Loglevel != "" && !hasFieldPrefix(kernelArgs, "loglevel=") && !hasField(kernelArgs, "quiet") {
+		kernelArgs = append(kernelArgs, "loglevel="+cfg.Loglevel)
+	}
+
 	info, _ := os.Stat(cfg.RootFSPath)
-	if !info.IsDir() && !hasFieldPrefix(kernelArgs, "rdinit=") {
-		kernelArgs = append(kernelArgs, "rdinit="+filepath.Base(cfg.RootFSPath))
+	if !info.IsDir() && !hasFieldPrefix(kernelArgs, "rdinit=") && !hasFieldPrefix(kernelArgs, "init=") {
+		kernelArgs = append(kernelArgs, "rdinit=/"+filepath.Base(cfg.RootFSPath))
 	}
 
 	vmArgs := strings.Fields(cfg.QemuCfgArgs)
+
+	if cfg.Memory != "" && !hasField(vmArgs, "-m") {
+		vmArgs = append(vmArgs, "-m", cfg.Memory)
+	}
+
+	if cfg.Smp != "" && !hasField(vmArgs, "-smp") {
+		vmArgs = append(vmArgs, "-smp", cfg.Smp)
+	}
 
 	// accelerate hypervisor by default
 	if cfg.Arch == runtime.GOARCH {
