@@ -98,8 +98,32 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	}
 
 	info, _ := os.Stat(cfg.RootFSPath)
-	if !info.IsDir() && !hasFieldPrefix(kernelArgs, "rdinit=") && !hasFieldPrefix(kernelArgs, "init=") {
-		kernelArgs = append(kernelArgs, "rdinit=/"+filepath.Base(cfg.RootFSPath))
+	var initFile string
+	if !info.IsDir() {
+		initFile = filepath.Base(cfg.RootFSPath)
+	}
+
+	if info.IsDir() {
+		entries, err := os.ReadDir(cfg.RootFSPath)
+		if err != nil {
+			return nil, fmt.Errorf("can't read rootfs directory: %w", err)
+		}
+		var fileEntry []os.DirEntry
+		for _, entry := range entries {
+			if entry.IsDir() || entry.Name() == "init" {
+				continue
+			}
+			fileEntry = append(fileEntry, entry)
+		}
+		if len(fileEntry) == 1 {
+			initFile = filepath.Base(fileEntry[0].Name())
+		}
+	}
+
+	if initFile != "" &&
+		!hasFieldPrefix(kernelArgs, "rdinit=") &&
+		!hasFieldPrefix(kernelArgs, "init=") {
+		kernelArgs = append(kernelArgs, "rdinit="+initFile)
 	}
 
 	vmArgs := strings.Fields(cfg.QemuCfgArgs)

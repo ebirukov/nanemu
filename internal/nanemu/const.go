@@ -12,7 +12,7 @@ var (
 		"arm64": "-serial mon:stdio -machine virt -cpu cortex-a53 -display none",
 	}
 	defaultKernelArgs = map[string]string{
-		"amd64": "console=ttyS0",
-		"arm64": "console=ttyAMA0",
+		"amd64": "console=ttyS0 PATH=/",
+		"arm64": "console=ttyAMA0 PATH=/",
 	}
 )
