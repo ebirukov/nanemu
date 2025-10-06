@@ -111,7 +111,16 @@ func (app *App) Run() error {
 		Pdeathsig: syscall.SIGTERM,
 	}
 
-	app.qemuCmd.Stderr, app.qemuCmd.Stdin = os.Stderr, os.Stdin
+	app.qemuCmd.Stderr = os.Stderr
+
+	cmdStdIn, err := app.qemuCmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("can't get stdin pipe: %w", err)
+	}
+
+	defer cmdStdIn.Close()
+
+	go io.Copy(cmdStdIn, os.Stdin)
 
 	cmdStdOut, err := app.qemuCmd.StdoutPipe()
 	if err != nil {
@@ -160,6 +169,7 @@ func printCmd(cmd *exec.Cmd) {
 	b.WriteString(cmd.Path)
 	for _, a := range cmd.Args[1:] {
 		if strings.HasPrefix(a, "-") {
+			b.WriteString(" \\")
 			b.WriteByte('\n')
 		}
 		b.WriteByte('\t')
