@@ -111,7 +111,7 @@ func (app *App) Run() error {
 		Pdeathsig: syscall.SIGTERM,
 	}
 
-	app.qemuCmd.Stderr, app.qemuCmd.Stdin = os.Stderr, os.Stderr
+	app.qemuCmd.Stderr, app.qemuCmd.Stdin = os.Stderr, os.Stdin
 
 	cmdStdOut, err := app.qemuCmd.StdoutPipe()
 	if err != nil {
