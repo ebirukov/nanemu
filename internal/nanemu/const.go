@@ -15,4 +15,8 @@ var (
 		"amd64": "console=ttyS0 PATH=/",
 		"arm64": "console=ttyAMA0 PATH=/",
 	}
+	defaultQemuBin = map[string]string{
+		"amd64": "qemu-system-x86_64",
+		"arm64": "qemu-system-aarch64",
+	}
 )

@@ -59,7 +59,13 @@ func (cfg *Config) Parse(args []string) error {
 		return fmt.Errorf("unsupported architecture: %s", cfg.Arch)
 	}
 
-	cfg.QemuBin = getEnv("QEMU_BIN", fmt.Sprintf("qemu-system-%s", cfg.Arch))
+	defaultQemuBin := defaultQemuBin[cfg.Arch]
+	switch runtime.GOOS {
+	case "windows":
+		defaultQemuBin = defaultQemuBin + "w.exe"
+	}
+
+	cfg.QemuBin = getEnv("QEMU_BIN", defaultQemuBin)
 	cfg.KernelArgs = getEnv(KernelArgs, defaultKernelArgs[cfg.Arch])
 	cfg.QemuCfgArgs = getEnv("QEMU_ARGS", defaultQemuArgs[cfg.Arch])
 
