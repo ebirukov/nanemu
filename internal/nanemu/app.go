@@ -107,9 +107,7 @@ func (app *App) Run() error {
 		close(app.stop)
 	}()
 
-	app.qemuCmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig: syscall.SIGTERM,
-	}
+	setPlatformProcAttr(app.qemuCmd)
 
 	app.qemuCmd.Stderr = os.Stderr
 
