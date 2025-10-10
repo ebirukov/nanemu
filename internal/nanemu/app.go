@@ -100,17 +100,21 @@ func (app *App) Run() error {
 
 		go func() {
 			select {
-			case <-app.ctx.Done():
 			case sig := <-app.stopSig:
 				app.qemuCmd.Process.Signal(sig)
 			}
 
-			app.shutdown()
-			close(app.stop)
+			app.cancel()
 		}()
 
 		setPlatformProcAttr(app.qemuCmd)
 	}
+
+	go func() {
+		<-app.ctx.Done()
+		app.shutdown()
+		close(app.stop)
+	}()
 
 	app.qemuCmd.Stderr = os.Stderr
 
