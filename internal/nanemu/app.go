@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 )
@@ -89,25 +90,27 @@ func (app *App) Run() error {
 		<-app.stop
 	}()
 
-	app.stopSig = make(chan os.Signal, 1)
-	defer close(app.stopSig)
-
-	signal.Notify(app.stopSig, os.Interrupt, syscall.SIGTERM)
-
 	app.qemuCmd = exec.CommandContext(app.ctx, app.config.QemuBin, app.qemuArgs...)
 
-	go func() {
-		select {
-		case <-app.ctx.Done():
-		case sig := <-app.stopSig:
-			app.qemuCmd.Process.Signal(sig)
-		}
+	if runtime.GOOS == "linux" {
+		app.stopSig = make(chan os.Signal, 1)
+		defer close(app.stopSig)
 
-		app.shutdown()
-		close(app.stop)
-	}()
+		signal.Notify(app.stopSig, os.Interrupt, syscall.SIGTERM, syscall.SIGABRT)
 
-	setPlatformProcAttr(app.qemuCmd)
+		go func() {
+			select {
+			case <-app.ctx.Done():
+			case sig := <-app.stopSig:
+				app.qemuCmd.Process.Signal(sig)
+			}
+
+			app.shutdown()
+			close(app.stop)
+		}()
+
+		setPlatformProcAttr(app.qemuCmd)
+	}
 
 	app.qemuCmd.Stderr = os.Stderr
 
