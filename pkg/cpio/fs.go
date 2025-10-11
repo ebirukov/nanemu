@@ -1,6 +1,7 @@
 package cpio
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -92,6 +93,16 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo) 
 	}
 	hdr.Name = name
 
+	if info.Mode().IsRegular() {
+		isExec, err := isExecutableFile(path)
+		if err != nil {
+			return err
+		}
+		if isExec {
+			hdr.Mode = 0755
+		}
+	}
+
 	if err := archive.WriteHeader(hdr); err != nil {
 		return err
 	}
@@ -112,4 +123,28 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo) 
 	}
 
 	return nil
+}
+
+func isExecutableFile(path string) (bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+
+	header := make([]byte, 4)
+	if _, err := file.Read(header); err != nil {
+		return false, err
+	}
+
+	switch {
+	// ELF
+	case bytes.Equal(header[:4], []byte{0x7F, 'E', 'L', 'F'}):
+		return true, nil
+	// script
+	case bytes.Equal(header[:2], []byte{'#', '!'}):
+		return true, nil
+	}
+
+	return false, nil
 }
