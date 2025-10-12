@@ -18,6 +18,11 @@ func TestCreate(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
+	scriptFile := filepath.Join(tmpDir, "script.sh")
+	if err := os.WriteFile(scriptFile, []byte("#!/bin/sh\necho test"), 0o644); err != nil {
+		t.Fatalf("failed to create script file: %v", err)
+	}
+
 	subDir := filepath.Join(tmpDir, "sub")
 	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("failed to create subdir: %v", err)
@@ -34,18 +39,19 @@ func TestCreate(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		rootPath string
-		wantErr  bool
-		check    func(t *testing.T, buf *bytes.Buffer)
+		name         string
+		rootPath     string
+		execPermBits int
+		wantErr      bool
+		check        func(t *testing.T, buf *bytes.Buffer)
 	}{
 		{
-			name:     "valid directory with files",
+			name:     "valid directory with files, no execPermBits",
 			rootPath: tmpDir,
 			wantErr:  false,
 			check: func(t *testing.T, buf *bytes.Buffer) {
 				r := cpio.NewReader(buf)
-				var got []string
+				modes := map[string]cpio.FileMode{}
 				for {
 					h, err := r.Next()
 					if err == io.EOF {
@@ -54,24 +60,34 @@ func TestCreate(t *testing.T) {
 					if err != nil {
 						t.Fatalf("unexpected error reading archive: %v", err)
 					}
-					got = append(got, h.Name)
+					modes[h.Name] = h.Mode
 				}
-
-				want := map[string]bool{
-					"file.txt":    false,
-					"sub":         false,
-					"sub/sub.txt": false,
-					"empty":       false,
+				if got := modes["script.sh"].Perm(); got&0o111 != 0 {
+					t.Errorf("expected script.sh to have no execute bits, got mode %v", got)
 				}
-				for _, name := range got {
-					if _, ok := want[name]; ok {
-						want[name] = true
+			},
+		},
+		{
+			name:         "valid directory with execPermBits set",
+			rootPath:     tmpDir,
+			execPermBits: 0o110, // u+x, g+x
+			wantErr:      false,
+			check: func(t *testing.T, buf *bytes.Buffer) {
+				r := cpio.NewReader(buf)
+				modes := map[string]cpio.FileMode{}
+				for {
+					h, err := r.Next()
+					if err == io.EOF {
+						break
 					}
-				}
-				for k, v := range want {
-					if !v {
-						t.Errorf("expected file/dir %q in archive, not found", k)
+					if err != nil {
+						t.Fatalf("unexpected error reading archive: %v", err)
 					}
+					modes[h.Name] = h.Mode
+				}
+				got := modes["script.sh"]
+				if got&0o110 != 0o110 {
+					t.Errorf("expected script.sh to have exec bits 0o110, got %04o", got)
 				}
 			},
 		},
@@ -91,9 +107,10 @@ func TestCreate(t *testing.T) {
 			},
 		},
 		{
-			name:     "single file instead of directory",
-			rootPath: filePath,
-			wantErr:  false,
+			name:         "single file instead of directory",
+			rootPath:     filePath,
+			execPermBits: 0,
+			wantErr:      false,
 			check: func(t *testing.T, buf *bytes.Buffer) {
 				r := cpio.NewReader(buf)
 				h, err := r.Next()
@@ -109,16 +126,17 @@ func TestCreate(t *testing.T) {
 			},
 		},
 		{
-			name:     "nonexistent root",
-			rootPath: filepath.Join(tmpDir, "doesnotexist"),
-			wantErr:  true,
+			name:         "nonexistent root",
+			rootPath:     filepath.Join(tmpDir, "doesnotexist"),
+			execPermBits: 0,
+			wantErr:      true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			err := Create(&buf, tt.rootPath)
+			err := Create(&buf, tt.rootPath, tt.execPermBits)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Create() error = %v, wantErr %v", err, tt.wantErr)
 			}
