@@ -53,7 +53,7 @@ func (app *App) Init() (err error) {
 		return os.Remove(initrdFile.Name())
 	})
 
-	if err = cpio.Create(initrdFile, app.config.RootFSPath); err != nil {
+	if err = cpio.Create(initrdFile, app.config.RootFSPath, defaultPermBitsMask[runtime.GOOS]); err != nil {
 		return fmt.Errorf("could not create cpio fs %s: %v", initrdFile.Name(), err)
 	}
 

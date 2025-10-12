@@ -46,12 +46,29 @@ import (
 //	        - filepath.Walk errors for directory traversal issues
 //
 // Notes:
-// - The archive is always closed, even if an error occurs
-// - Symlinks are preserved in the archive
-// - Special files (devices, sockets etc.) are skipped
-// - File ownership is preserved from the source filesystem
-// - Uses standard CPIO newc format for maximum compatibility
-func Create(out io.Writer, root string) error {
+//   - The archive is always closed, even if an error occurs
+//   - Symlinks are preserved in the archive
+//   - Special files (devices, sockets etc.) are skipped
+//   - File ownership is preserved from the source filesystem
+//   - Uses standard CPIO newc format for maximum compatibility
+//   - Executable permission bits (`execPermBits`) are applied only to regular files
+//     identified as ELF binaries on scripts (based on file header), and do not override other
+//     permission bits unless explicitly set
+//
+// Why `execPermBits` is needed:
+//
+// On platforms like Windows, file permission bits (such as execute) are not reliably
+// preserved or even available via the filesystem. As a result, when building an
+// initramfs archive on Windows, executables like Linux ELF binaries may lose their
+// execute permission inside the archive, leading to runtime errors such as:
+//
+//	error -13 (Permission denied)
+//
+// This flag allows the caller to explicitly control which permission bits to apply
+// to detected executable files when packaging the archive. This ensures the resulting
+// initramfs is bootable and usable across platforms, regardless of the host OS
+// limitations.
+func Create(out io.Writer, root string, execPermBits int) error {
 	info, err := os.Stat(root)
 	if os.IsNotExist(err) {
 		return fmt.Errorf("root does not exist: %s", root)
@@ -65,7 +82,7 @@ func Create(out io.Writer, root string) error {
 
 	if !info.IsDir() {
 		// root is single file
-		return addFileToArchive(archive, filepath.Dir(root), root, info)
+		return addFileToArchive(archive, filepath.Dir(root), root, info, execPermBits)
 	}
 
 	return filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
@@ -73,11 +90,11 @@ func Create(out io.Writer, root string) error {
 			return err
 		}
 
-		return addFileToArchive(archive, root, path, fi)
+		return addFileToArchive(archive, root, path, fi, execPermBits)
 	})
 }
 
-func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo) error {
+func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, execPermBits int) error {
 	name, err := filepath.Rel(dir, path)
 	if err != nil {
 		return err
@@ -93,13 +110,16 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo) 
 	}
 	hdr.Name = name
 
-	if info.Mode().IsRegular() {
+	if info.Mode().IsRegular() && execPermBits > 0 {
 		isExec, err := isExecutableFile(path)
 		if err != nil {
 			return err
 		}
 		if isExec {
-			hdr.Mode = 0755
+			// add exec attributes
+			fmt.Printf("file %s permision mode flags %v", path, hdr.Mode)
+			hdr.Mode |= cpio.FileMode(execPermBits)
+			fmt.Printf(" was modified to %v\n", hdr.Mode)
 		}
 	}
 
@@ -126,15 +146,24 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo) 
 }
 
 func isExecutableFile(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false, nil
+	}
+
+	header := make([]byte, 4)
+	if !info.Mode().IsRegular() || info.Size() < int64(len(header)) {
+		return false, nil
+	}
+
 	file, err := os.Open(path)
 	if err != nil {
 		return false, err
 	}
 	defer file.Close()
 
-	header := make([]byte, 4)
 	if _, err := file.Read(header); err != nil {
-		return false, err
+		return false, fmt.Errorf("can't read %s header: %w", path, err)
 	}
 
 	switch {
@@ -144,6 +173,8 @@ func isExecutableFile(path string) (bool, error) {
 	// script
 	case bytes.Equal(header[:2], []byte{'#', '!'}):
 		return true, nil
+	default:
+		fmt.Printf("non exec file; header: %s", header)
 	}
 
 	return false, nil
