@@ -97,7 +97,7 @@ func Create(out io.Writer, root string, execPermBits int) error {
 func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, execPermBits int) error {
 	name, err := filepath.Rel(dir, path)
 	if err != nil {
-		return err
+		return fmt.Errorf("cpio: could not determine relative path for %s: %w", path, err)
 	}
 	// skip root
 	if name == "." {
@@ -106,7 +106,7 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 
 	hdr, err := cpio.FileInfoHeader(info, name)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create cpio header for %s: %w", name, err)
 	}
 	hdr.Name = name
 
@@ -124,22 +124,29 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 	}
 
 	if err := archive.WriteHeader(hdr); err != nil {
-		return err
+		return fmt.Errorf("cpio: failed to write file header for %s: %w", name, err)
 	}
 
-	if info.Mode().IsDir() {
-		return nil
-	}
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		linkTarget, err := os.Readlink(path)
+		if err != nil {
+			return fmt.Errorf("cpio: failed to write %s %s to archive :%w", info.Name(), info.Mode(), err)
+		}
 
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
+		if _, err = archive.Write([]byte(linkTarget)); err != nil {
+			return fmt.Errorf("cpio: failed to write %s %s to archive :%w", info.Name(), info.Mode(), err)
+		}
+	case info.Mode().IsRegular():
+		file, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("cpio: failed to write %s %s to archive :%w", info.Name(), info.Mode(), err)
+		}
 
-	defer file.Close()
-
-	if _, err := io.Copy(archive, file); err != nil {
-		return err
+		defer file.Close()
+		if _, err = io.Copy(archive, file); err != nil {
+			return fmt.Errorf("cpio: failed to write %s %s to archive :%w", info.Name(), info.Mode(), err)
+		}
 	}
 
 	return nil

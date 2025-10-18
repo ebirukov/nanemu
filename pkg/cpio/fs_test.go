@@ -38,6 +38,11 @@ func TestCreate(t *testing.T) {
 		t.Fatalf("failed to create empty dir: %v", err)
 	}
 
+	linkPath := filepath.Join(tmpDir, "init")
+	if err := os.Symlink("hello-amd64", linkPath); err != nil {
+		t.Fatalf("failed to create symlink: %v", err)
+	}
+
 	tests := []struct {
 		name         string
 		rootPath     string
@@ -130,6 +135,44 @@ func TestCreate(t *testing.T) {
 			rootPath:     filepath.Join(tmpDir, "doesnotexist"),
 			execPermBits: 0,
 			wantErr:      true,
+		},
+		{
+			name:         "symlink preserved in archive",
+			rootPath:     tmpDir,
+			execPermBits: 0,
+			wantErr:      false,
+			check: func(t *testing.T, buf *bytes.Buffer) {
+				r := cpio.NewReader(buf)
+				var found bool
+				for {
+					h, err := r.Next()
+					if err == io.EOF {
+						break
+					}
+					if err != nil {
+						t.Fatalf("unexpected error reading archive: %v", err)
+					}
+					if h.Name == "init" {
+						found = true
+						if h.Mode&cpio.TypeSymlink == 0 {
+							t.Errorf("expected init to be a symlink, got mode %v", h.Mode)
+						}
+
+						wantTarget := "hello-amd64"
+						if h.Linkname != wantTarget {
+							t.Errorf("expected symlink target to be %q, got %q", wantTarget, h.Linkname)
+						}
+
+						// Вместо проверки размера через h.Size — проверить длину Linkname
+						if len(h.Linkname) != len(wantTarget) {
+							t.Errorf("expected symlink target length %d, got %d", len(wantTarget), len(h.Linkname))
+						}
+					}
+				}
+				if !found {
+					t.Errorf("symlink 'init' not found in archive")
+				}
+			},
 		},
 	}
 
