@@ -1,0 +1,3 @@
+ -chardev socket,path=%s,server=on,wait=off,id=unix0
+ -device virtio-serial-pci
+ -device virtserialport,chardev=unix0,name=unix.sock

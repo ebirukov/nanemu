@@ -11,20 +11,22 @@ import (
 )
 
 type Config struct {
-	Arch        string
-	QemuBin     string
-	QemuCfgArgs string
-	KernelArgs  string
-	KernelPath  string
-	RootFSPath  string
-	ExecTimeout time.Duration
-	FailOnPanic bool
-	Loglevel    string
+	Arch           string
+	QemuBin        string
+	QemuCfgArgs    string
+	QemuExtCfgArgs *ExtArgs
+	KernelArgs     string
+	KernelPath     string
+	RootFSPath     string
+	ExecTimeout    time.Duration
+	FailOnPanic    bool
+	Loglevel       string
 
 	Memory string
 	Smp    string
 
 	initrdFile string
+	localDir   string
 }
 
 func (cfg *Config) Parse(args []string) error {
@@ -33,6 +35,10 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	fs := flag.NewFlagSet(filepath.Base(args[0]), flag.ExitOnError)
+	cfg.QemuExtCfgArgs = NewExtFlags(fs)
+	if err := cfg.QemuExtCfgArgs.Init(cfg.localDir); err != nil {
+		return fmt.Errorf("init qemu args: %w", err)
+	}
 
 	fs.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
 	fs.StringVar(&cfg.KernelPath, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image")
@@ -132,7 +138,7 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		kernelArgs = append(kernelArgs, "rdinit="+initFile)
 	}
 
-	vmArgs := strings.Fields(cfg.QemuCfgArgs)
+	vmArgs := append(cfg.QemuExtCfgArgs.Args(), strings.Fields(cfg.QemuCfgArgs)...)
 
 	if cfg.Memory != "" && !hasField(vmArgs, "-m") {
 		vmArgs = append(vmArgs, "-m", cfg.Memory)

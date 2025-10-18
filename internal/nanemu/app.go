@@ -28,10 +28,12 @@ type App struct {
 	err        error
 }
 
-func NewApp() *App {
+func NewApp(cfgDir string) *App {
 	return &App{
-		config: &Config{},
-		stop:   make(chan struct{}),
+		config: &Config{
+			localDir: cfgDir,
+		},
+		stop: make(chan struct{}),
 	}
 }
 

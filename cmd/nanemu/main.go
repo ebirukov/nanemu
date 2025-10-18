@@ -3,6 +3,7 @@ package main
 import (
 	"debug/buildinfo"
 	"fmt"
+	"github.com/ebirukov/nanemu/fs"
 	"github.com/ebirukov/nanemu/internal/nanemu"
 	"log"
 	"os"
@@ -25,7 +26,7 @@ func main() {
 		return
 	}
 
-	app := nanemu.NewApp()
+	app := nanemu.NewApp(fs.CfgDir())
 
 	if err := app.Init(); err != nil {
 		log.Fatalf("failed to initialize app: %v", err)
