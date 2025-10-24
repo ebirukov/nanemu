@@ -11,7 +11,10 @@ import (
 	"strings"
 )
 
-const cmdDescTmpl = "flag source %s"
+const (
+	cmdDescTmpl = "flag source %s"
+	unixSuffix  = "unix"
+)
 
 type ExtArgs struct {
 	extCmdFlags map[string]ExtFlag
@@ -45,6 +48,11 @@ func (a *ExtArgs) Init(dir string) error {
 			continue
 		}
 
+		osFam, ok := isSupportedOS(file.Name())
+		if !ok {
+			continue
+		}
+
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("can't open extension file %s: %w", path, err)
@@ -58,12 +66,15 @@ func (a *ExtArgs) Init(dir string) error {
 
 		ext := filepath.Ext(file.Name())
 		flags.Arch = strings.TrimLeft(ext, ".")
-		cmdFlagName := file.Name()
-		if cmdFlagName, ex := strings.CutSuffix(file.Name(), ext); ex {
-			cmdFlagName = cmdFlagName + "-" + ext
+
+		cmdFlagName := strings.ReplaceAll(file.Name(), "-"+osFam, "")
+		var ex bool
+		if ext != "" {
+			if cmdFlagName, ex = strings.CutSuffix(file.Name(), ext); ex {
+				cmdFlagName = cmdFlagName + "-" + flags.Arch
+			}
 		}
 
-		log.Println(flag.Lookup(cmdFlagName), cmdFlagName)
 		if a.fs.Lookup(cmdFlagName) != nil {
 			return fmt.Errorf("flag %s is duplicated. file %s", cmdFlagName, path)
 		}
@@ -140,4 +151,42 @@ func (a *ExtArgs) arch() string {
 	}
 
 	return runtime.GOARCH
+}
+
+func isSupportedOS(fileName string) (string, bool) {
+	osSuffix := restrictByOSFamily(fileName)
+	if len(osSuffix) == 0 {
+		return "", true
+	}
+
+	if unixSuffix == osSuffix {
+		return unixSuffix, isUnix()
+	}
+
+	return osSuffix, runtime.GOOS == osSuffix
+
+}
+
+func restrictByOSFamily(fileName string) string {
+	for _, os := range []string{
+		"unix",
+		"darwin",
+		"linux",
+		"windows",
+		"freebsd",
+	} {
+		if strings.Contains(fileName, "-"+os) {
+			return os
+		}
+	}
+
+	return ""
+}
+
+func isUnix() bool {
+	switch runtime.GOOS {
+	case "windows":
+		return false
+	}
+	return true
 }
