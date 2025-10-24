@@ -7,10 +7,7 @@ const KernelArgs = "KERNEL_ARGS"
 const PanicMsg = "Kernel panic"
 
 var (
-	defaultQemuArgs = map[string]string{
-		"amd64": "-serial mon:stdio -machine pc -cpu max -display none",
-		"arm64": "-serial mon:stdio -machine virt -cpu cortex-a53 -display none",
-	}
+	defaultQemuArgs   = map[string]string{}
 	defaultKernelArgs = map[string]string{
 		"amd64": "console=ttyS0 PATH=/",
 		"arm64": "console=ttyAMA0 PATH=/",

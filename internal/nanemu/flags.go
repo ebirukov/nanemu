@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -28,6 +29,7 @@ type ExtFlag struct {
 	Tmpls  []string
 	Values *string
 	Desc   string
+	Arch   string
 }
 
 func (a *ExtArgs) Init(dir string) error {
@@ -42,7 +44,6 @@ func (a *ExtArgs) Init(dir string) error {
 		if file.IsDir() {
 			continue
 		}
-		cmdFlagName := file.Name()
 
 		content, err := os.ReadFile(path)
 		if err != nil {
@@ -54,6 +55,19 @@ func (a *ExtArgs) Init(dir string) error {
 			return fmt.Errorf("can't parse extension file %s: %w", path, err)
 		}
 		var flags = ExtFlag{}
+
+		ext := filepath.Ext(file.Name())
+		flags.Arch = strings.TrimLeft(ext, ".")
+		cmdFlagName := file.Name()
+		if cmdFlagName, ex := strings.CutSuffix(file.Name(), ext); ex {
+			cmdFlagName = cmdFlagName + "-" + ext
+		}
+
+		log.Println(flag.Lookup(cmdFlagName), cmdFlagName)
+		if a.fs.Lookup(cmdFlagName) != nil {
+			return fmt.Errorf("flag %s is duplicated. file %s", cmdFlagName, path)
+		}
+
 		desc := fmt.Sprintf(cmdDescTmpl, path)
 		for _, l := range lines {
 			if strings.HasPrefix(l, "#") || strings.HasPrefix(l, "//") {
@@ -66,7 +80,7 @@ func (a *ExtArgs) Init(dir string) error {
 		argsCnt := strings.Count(string(content), "%s")
 
 		if argsCnt == 0 {
-			a.fs.Bool(cmdFlagName, false, desc)
+			a.fs.Bool(cmdFlagName, strings.HasPrefix(cmdFlagName, "default"), desc)
 		}
 
 		if argsCnt > 0 {
@@ -88,10 +102,16 @@ func (a *ExtArgs) Args() (args []string) {
 			f.Value.String() == strconv.FormatBool(false) {
 			return
 		}
+
 		flags, ok := a.extCmdFlags[f.Name]
 		if !ok {
 			return
 		}
+
+		if flags.Arch != "" && flags.Arch != a.arch() {
+			return
+		}
+
 		var flagVal []any
 		for _, val := range []*string{flags.Values} {
 			if val != nil {
@@ -111,4 +131,13 @@ func (a *ExtArgs) Args() (args []string) {
 	})
 
 	return args
+}
+
+func (a *ExtArgs) arch() string {
+	f := a.fs.Lookup("arch")
+	if f != nil {
+		return f.Value.String()
+	}
+
+	return runtime.GOARCH
 }

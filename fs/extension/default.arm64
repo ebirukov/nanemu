@@ -1,0 +1,2 @@
+-machine virt
+-cpu cortex-a53

@@ -36,9 +36,6 @@ func (cfg *Config) Parse(args []string) error {
 
 	fs := flag.NewFlagSet(filepath.Base(args[0]), flag.ExitOnError)
 	cfg.QemuExtCfgArgs = NewExtFlags(fs)
-	if err := cfg.QemuExtCfgArgs.Init(cfg.localDir); err != nil {
-		return fmt.Errorf("init qemu args: %w", err)
-	}
 
 	fs.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
 	fs.StringVar(&cfg.KernelPath, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image")
@@ -48,6 +45,10 @@ func (cfg *Config) Parse(args []string) error {
 	fs.StringVar(&cfg.Memory, "memory", "", "Memory limit")
 	fs.StringVar(&cfg.Smp, "smp", "", "Cpus limit")
 	fs.StringVar(&cfg.Loglevel, "loglevel", "", "kernel log level")
+
+	if err := cfg.QemuExtCfgArgs.Init(cfg.localDir); err != nil {
+		return fmt.Errorf("init qemu args: %w", err)
+	}
 
 	if err := fs.Parse(args[1:]); err != nil {
 		return fmt.Errorf("can't parse command flags: %w", err)
