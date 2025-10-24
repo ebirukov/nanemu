@@ -13,22 +13,50 @@ import (
 var Files embed.FS
 var cfgDir string
 
-const cfgDirName = ".nanemu"
+const (
+	cfgDirName    = ".nanemu"
+	nanemuEnvName = "NANEMU_PATH"
+)
 
 var once sync.Once
 
 func CfgDir() string {
 	once.Do(func() {
-		err := os.Mkdir(cfgDirName, 0755)
-		if err != nil && !os.IsExist(err) {
-			log.Fatal(fmt.Errorf("can't create nanemu directory: %w", err))
+		path := cfgDirName
+		var err error
+		nanemuPath, ex := os.LookupEnv(nanemuEnvName)
+		if ex {
+			path = filepath.Join(nanemuPath, cfgDirName)
+			err = os.Mkdir(path, 0755)
+			if err != nil && !os.IsExist(err) {
+				log.Fatal(fmt.Errorf("can't create nanemu config directory: %w", err))
+			}
+		}
+		if !ex {
+			homePath, ex := os.LookupEnv("HOME")
+			if ex {
+				path = filepath.Join(homePath, cfgDirName)
+				err = os.Mkdir(path, 0755)
+				if err != nil && !os.IsPermission(err) && !os.IsExist(err) {
+					log.Fatal(fmt.Errorf("can't create nanemu config directory: %w", err))
+				}
+			}
+		}
+		if os.IsPermission(err) {
+			path = cfgDirName
+			err = os.Mkdir(path, 0755)
+			if err != nil && !os.IsExist(err) {
+				log.Fatal(fmt.Errorf("can't create nanemu config directory: %w", err))
+			}
 		}
 
 		exists := os.IsExist(err)
 
-		if cfgDir, err = filepath.Abs(cfgDirName); err != nil {
-			log.Fatal(fmt.Errorf("can't resolve absolute path of .nanemu: %w", err))
+		if cfgDir, err = filepath.Abs(path); err != nil {
+			log.Fatal(fmt.Errorf("can't resolve absolute path %s of .nanemu: %w", path, err))
 		}
+
+		log.Println("config path:", cfgDir)
 
 		if exists {
 			return

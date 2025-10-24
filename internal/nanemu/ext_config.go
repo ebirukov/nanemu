@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const cmdDescTmpl = "additional arguments from file %s"
+const cmdDescTmpl = "flag source %s"
 
 type ExtArgs struct {
 	extCmdFlags map[string]ExtFlag
@@ -27,6 +27,7 @@ func NewExtFlags(fs *flag.FlagSet) *ExtArgs {
 type ExtFlag struct {
 	Tmpls  []string
 	Values *string
+	Desc   string
 }
 
 func (a *ExtArgs) Init(dir string) error {
@@ -48,22 +49,31 @@ func (a *ExtArgs) Init(dir string) error {
 			return fmt.Errorf("can't open extension file %s: %w", path, err)
 		}
 
-		tmpls := strings.Split(string(content), "\n")
+		lines := strings.Split(string(content), "\n")
+		if len(lines) == 0 {
+			return fmt.Errorf("can't parse extension file %s: %w", path, err)
+		}
+		var flags = ExtFlag{}
+		desc := fmt.Sprintf(cmdDescTmpl, path)
+		for _, l := range lines {
+			if strings.HasPrefix(l, "#") || strings.HasPrefix(l, "//") {
+				desc = strings.Join([]string{desc, strings.TrimLeft(l, "//#")}, "\n")
+				continue
+			}
+			flags.Tmpls = append(flags.Tmpls, l)
+		}
+
 		argsCnt := strings.Count(string(content), "%s")
 
 		if argsCnt == 0 {
-			a.fs.Bool(cmdFlagName, false, fmt.Sprintf(cmdDescTmpl, path))
-			a.extCmdFlags[cmdFlagName] = ExtFlag{
-				Tmpls: tmpls,
-			}
+			a.fs.Bool(cmdFlagName, false, desc)
 		}
 
 		if argsCnt > 0 {
-			a.extCmdFlags[cmdFlagName] = ExtFlag{
-				Tmpls:  tmpls,
-				Values: a.fs.String(cmdFlagName, "none", fmt.Sprintf(cmdDescTmpl, path)),
-			}
+			flags.Values = a.fs.String(cmdFlagName, "none", desc)
 		}
+
+		a.extCmdFlags[cmdFlagName] = flags
 	}
 
 	return nil
