@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/cavaliergopher/cpio"
 )
@@ -80,9 +81,11 @@ func Create(out io.Writer, root string, execPermBits int) error {
 	archive := cpio.NewWriter(out)
 	defer archive.Close()
 
+	seen := make(map[fileKey]string)
+
 	if !info.IsDir() {
 		// root is single file
-		return addFileToArchive(archive, filepath.Dir(root), root, info, execPermBits)
+		return addFileToArchive(archive, filepath.Dir(root), root, info, execPermBits, seen)
 	}
 
 	return filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
@@ -90,11 +93,11 @@ func Create(out io.Writer, root string, execPermBits int) error {
 			return err
 		}
 
-		return addFileToArchive(archive, root, path, fi, execPermBits)
+		return addFileToArchive(archive, root, path, fi, execPermBits, seen)
 	})
 }
 
-func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, execPermBits int) error {
+func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, execPermBits int, seen map[fileKey]string) error {
 	name, err := filepath.Rel(dir, path)
 	if err != nil {
 		return fmt.Errorf("cpio: could not determine relative path for %s: %w", path, err)
@@ -109,6 +112,18 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 		return fmt.Errorf("failed to create cpio header for %s: %w", name, err)
 	}
 	hdr.Name = name
+
+	// Unix, Linux, macOS
+	if key, ok := inodeKey(info); ok {
+		if prev, seenBefore := seen[key]; seenBefore {
+			hdr.Linkname = prev
+			hdr.Size = 0
+		} else {
+			seen[key] = hdr.Name
+		}
+		hdr.Inode = key.Ino
+		hdr.Links = key.Nlink
+	}
 
 	if info.Mode().IsRegular() && execPermBits > 0 {
 		isExec, err := isExecutableFile(path)
@@ -137,7 +152,7 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 		if _, err = archive.Write([]byte(linkTarget)); err != nil {
 			return fmt.Errorf("cpio: failed to write %s %s to archive :%w", info.Name(), info.Mode(), err)
 		}
-	case info.Mode().IsRegular():
+	case info.Mode().IsRegular() && hdr.Linkname == "":
 		file, err := os.Open(path)
 		if err != nil {
 			return fmt.Errorf("cpio: failed to write %s %s to archive :%w", info.Name(), info.Mode(), err)
@@ -185,4 +200,21 @@ func isExecutableFile(path string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+type fileKey struct {
+	Dev   uint64
+	Ino   int64
+	Nlink int
+}
+
+func inodeKey(info os.FileInfo) (fileKey, bool) {
+	sys := info.Sys()
+	switch stat := sys.(type) {
+	case *syscall.Stat_t: // Unix, Linux, macOS
+		return fileKey{Dev: stat.Dev, Ino: int64(stat.Ino), Nlink: int(stat.Nlink)}, true
+	default:
+		// Windows
+		return fileKey{}, false
+	}
 }

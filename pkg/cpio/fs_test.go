@@ -189,3 +189,68 @@ func TestCreate(t *testing.T) {
 		})
 	}
 }
+
+func TestHardlinks(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// создаём реальный файл
+	filePath := filepath.Join(tmpDir, "file.txt")
+	content := []byte("hello hardlink")
+	if err := os.WriteFile(filePath, content, 0o644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	// создаём второй файл как hardlink к первому
+	hardlinkPath := filepath.Join(tmpDir, "file2.txt")
+	if err := os.Link(filePath, hardlinkPath); err != nil {
+		t.Fatalf("failed to create hardlink: %v", err)
+	}
+
+	// создаём cpio архив
+	var buf bytes.Buffer
+	if err := Create(&buf, tmpDir, 0); err != nil {
+		t.Fatalf("Create() failed: %v", err)
+	}
+
+	r := cpio.NewReader(&buf)
+	inodes := map[int64][]*cpio.Header{}
+
+	for {
+		h, err := r.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		inodes[h.Inode] = append(inodes[h.Inode], h)
+	}
+
+	for _, files := range inodes {
+		if len(files) < 2 {
+			continue
+		}
+
+		var orig *cpio.Header
+		for _, f := range files {
+			if f.Size != 0 { // оригинал имеет ненулевой размер
+				orig = f
+				break
+			}
+		}
+
+		if orig == nil {
+			t.Errorf("expected one original file with Size>0, got none")
+			continue
+		}
+
+		for _, f := range files {
+			if f != orig {
+				if f.Size != 0 {
+					t.Errorf("expected Size=0 for hardlink %q, got %d", f.Name, f.Size)
+				}
+			}
+		}
+	}
+
+}
