@@ -123,12 +123,12 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		}
 		var fileEntry []os.DirEntry
 		for _, entry := range entries {
-			if entry.IsDir() || entry.Name() == "init" {
+			if entry.IsDir() {
 				continue
 			}
 			fileEntry = append(fileEntry, entry)
 		}
-		if len(fileEntry) == 1 {
+		if len(fileEntry) == 1 && fileEntry[0].Name() != "init" {
 			initFile = filepath.Base(fileEntry[0].Name())
 		}
 	}
