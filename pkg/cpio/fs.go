@@ -3,12 +3,10 @@ package cpio
 import (
 	"bytes"
 	"fmt"
+	"github.com/cavaliergopher/cpio"
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
-
-	"github.com/cavaliergopher/cpio"
 )
 
 // Create writes a CPIO archive containing the directory tree rooted at rootDir
@@ -203,18 +201,6 @@ func isExecutableFile(path string) (bool, error) {
 }
 
 type fileKey struct {
-	Dev   uint64
 	Ino   int64
 	Nlink int
-}
-
-func inodeKey(info os.FileInfo) (fileKey, bool) {
-	sys := info.Sys()
-	switch stat := sys.(type) {
-	case *syscall.Stat_t: // Unix, Linux, macOS
-		return fileKey{Dev: stat.Dev, Ino: int64(stat.Ino), Nlink: int(stat.Nlink)}, true
-	default:
-		// Windows
-		return fileKey{}, false
-	}
 }
