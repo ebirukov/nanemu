@@ -9,8 +9,8 @@ const PanicMsg = "Kernel panic"
 var (
 	defaultQemuArgs   = map[string]string{}
 	defaultKernelArgs = map[string]string{
-		"amd64": "console=ttyS0 PATH=/",
-		"arm64": "console=ttyAMA0 PATH=/",
+		"amd64": "console=ttyS0",
+		"arm64": "console=ttyAMA0",
 	}
 	defaultQemuBin = map[string]string{
 		"amd64": "qemu-system-x86_64",

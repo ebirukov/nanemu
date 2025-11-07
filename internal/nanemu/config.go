@@ -110,6 +110,10 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		kernelArgs = append(kernelArgs, "loglevel="+cfg.Loglevel)
 	}
 
+	if !hasFieldPrefix(kernelArgs, "PATH=") {
+		kernelArgs = append(kernelArgs, "PATH=/")
+	}
+
 	info, _ := os.Stat(cfg.RootFSPath)
 	var initFile string
 	if !info.IsDir() {
