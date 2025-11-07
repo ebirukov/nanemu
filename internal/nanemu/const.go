@@ -2,7 +2,7 @@ package nanemu
 
 import "time"
 
-const DefaultExecTimeout = 10 * time.Second
+const DefaultExecTimeout = 30 * time.Minute
 const KernelArgs = "KERNEL_ARGS"
 const PanicMsg = "Kernel panic"
 

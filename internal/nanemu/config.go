@@ -44,7 +44,7 @@ func (cfg *Config) Parse(args []string) error {
 	fs.DurationVar(&cfg.ExecTimeout, "timeout", DefaultExecTimeout, "Max time of qemu execution")
 	fs.StringVar(&cfg.Memory, "memory", "", "Memory limit")
 	fs.StringVar(&cfg.Smp, "smp", "", "Cpus limit")
-	fs.StringVar(&cfg.Loglevel, "loglevel", "", "kernel log level")
+	fs.StringVar(&cfg.Loglevel, "loglevel", "3", "kernel log level")
 
 	if err := cfg.QemuExtCfgArgs.Init(cfg.localDir); err != nil {
 		return fmt.Errorf("init qemu args: %w", err)
