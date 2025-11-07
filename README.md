@@ -39,14 +39,14 @@ GOBIN=$GOPATH/bin go install github.com/ebirukov/nanemu/cmd/nanemu@latest
 
 ## Примеры использования
 
-🔧 **Запуск одиночного файла init:**
+🔧 **Запуск одиночного файла init:**default
 
 ```bash
-QEMU_ARGS="-machine virt -cpu cortex-a53" \
-go run cmd/qemu-runner/main.go \
-  -kernel kernel/arm64/linux-5.10.0-32-arm64
-  -rootfs init
-  -arch arm64
+nanemu -kernel kernel/arm64/linux-5.10.0-32 -rootfs init
+```
+
+```bash
+nanemu -kernel kernel/arm64/linux-5.10.0-32-arm64 -rootfs init -arch arm64
 ```
 
 🖥 **Запуск с кастомными параметрами:**
@@ -54,7 +54,7 @@ go run cmd/qemu-runner/main.go \
 ```bash
 QEMU_BIN=/usr/bin/qemu-system-amd64 \
 KERNEL_ARGS="initrd=/mybin cma=0 audit=0 nowatchdog nosmp maxcpus=1 ipv6.disable=1 net.ifnames=0 lsm= acpi=off ima_appraise=off" \
-go run cmd/qemu-runner/main.go \
+nanemu \
   -kernel kernel/amd64/linux-6.1.0-35-amd64 \
   -rootfs build/amd64/initramfs \
   -arch arm64
