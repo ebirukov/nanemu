@@ -3,11 +3,12 @@ name: Go Build
 on:
   push:
     tags:
-      - 'v*'  # Срабатывает только на теги вида v1.0.0, v2.1.0 и т.д.
+      - 'v*'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions: write-all
 
     strategy:
       matrix:
@@ -33,15 +34,9 @@ jobs:
 
       - name: Build the Go binary
         run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o nanemu-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.run_id }} ./cmd/nanemu
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o nanemu-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }} ./cmd/nanemu
 
-      - name: Upload binary as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nanemu-bin-${{ github.ref_name }}-${{ github.run_id }}-${{ github.sha }}
-          path: nanemu-*
-
-      - name: Upload release binary (optional)
+      - name: Upload release binary
         uses: softprops/action-gh-release@v1
         with:
           files: nanemu-*
