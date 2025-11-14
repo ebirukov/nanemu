@@ -41,7 +41,7 @@ jobs:
       - name: Upload binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nanemu-bin-${{ github.ref_name }}
+          name: nanemu-bin-${{ github.ref_name }}-${{ github.run_id }}
           path: nanemu-*
 
       - name: Upload release binary (optional)
