@@ -26,13 +26,17 @@ jobs:
         with:
           go-version: '1.25'
 
+      - name: Clean up old build files (if any)
+        run: |
+          rm -rf nanemu-*
+
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-go-
 
@@ -47,7 +51,7 @@ jobs:
       - name: Upload binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nanemu-bin
+          name: nanemu-bin-${{ github.run_id }}  # Уникальное имя артефакта для каждого run
           path: nanemu-*
 
       - name: Upload release binary (optional)
