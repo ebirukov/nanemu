@@ -1,4 +1,0 @@
-# create and pass unix socket to vm serial port, use: -console <UNIX SOCKET PATH>
- -chardev socket,path=%s,server=on,wait=off,id=unix0
- -device virtio-serial-pci
- -device virtserialport,chardev=unix0,name=unix.sock

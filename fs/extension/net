@@ -1,0 +1,8 @@
+#extension flag - configute qemu user network.
+# see -netdev user in https://www.qemu.org/docs/master/system/qemu-manpage.html.
+# syntax: -net [net=addr][,host=addr][,dhcpstart=addr][dns=addr][hostfwd=][guestfwd=][,...]
+# examples:
+# -net net=192.168.0.0/24,host=192.168.0.1,dns=192.168.0.3,dhcpstart=192.168.0.10
+# -net net=10.10.0.0/24,hostfwd=udp::12345-:12345,hostfwd=tcp::8080-:80
+-device virtio-net-pci,netdev=usernet
+-netdev user,id=usernet,%s

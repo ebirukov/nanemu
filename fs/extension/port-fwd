@@ -6,4 +6,4 @@
 # vm ip must be 10.0.2.15 (see https://www.qemu.org/docs/master/system/devices/net.html)
 #
 -device virtio-net-pci,netdev=net0
--netdev user,id=net0,hostfwd=%s
+-netdev user,id=net0,dns=10.0.2.3,hostfwd=%s
