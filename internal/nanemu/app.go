@@ -42,7 +42,11 @@ func (app *App) Init() (err error) {
 		return fmt.Errorf("can't parse config: %w", err)
 	}
 
-	app.ctx, app.cancel = context.WithTimeout(context.Background(), app.config.ExecTimeout)
+	if app.config.ExecTimeout > 0 {
+		app.ctx, app.cancel = context.WithTimeout(context.Background(), app.config.ExecTimeout)
+	} else {
+		app.ctx, app.cancel = context.WithCancel(context.Background())
+	}
 
 	initrdFile, err := os.CreateTemp(".", "initramfs.cpio")
 	if err != nil {

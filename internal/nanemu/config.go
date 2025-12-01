@@ -37,14 +37,22 @@ func (cfg *Config) Parse(args []string) error {
 	fs := flag.NewFlagSet(filepath.Base(args[0]), flag.ExitOnError)
 	cfg.QemuExtCfgArgs = NewExtFlags(fs)
 
+	var showHelp bool
+	fs.BoolVar(&showHelp, "h", false, "show help")
 	fs.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
-	fs.StringVar(&cfg.KernelPath, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image")
+	fs.StringVar(&cfg.KernelPath, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image (default $KERNEL_PATH)")
 	fs.StringVar(&cfg.RootFSPath, "rootfs", "", "Path to initramfs root directory")
 	fs.BoolVar(&cfg.FailOnPanic, "fail-on-panic", true, "Fail on kernel panic")
-	fs.DurationVar(&cfg.ExecTimeout, "timeout", DefaultExecTimeout, "Max time of qemu execution")
+	fs.DurationVar(&cfg.ExecTimeout, "timeout", 0, "Max time of qemu execution")
 	fs.StringVar(&cfg.Memory, "memory", "", "Memory limit")
 	fs.StringVar(&cfg.Smp, "smp", "", "Cpus limit")
 	fs.StringVar(&cfg.Loglevel, "loglevel", "3", "kernel log level")
+
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "Usage: \n nanemu [Options] -kernel /path/to/linux/kernel /path/to/rootfs \n")
+		fmt.Fprintf(fs.Output(), "Options:\n")
+		fs.PrintDefaults()
+	}
 
 	if err := cfg.QemuExtCfgArgs.Init(cfg.localDir); err != nil {
 		return fmt.Errorf("init qemu args: %w", err)
@@ -54,10 +62,25 @@ func (cfg *Config) Parse(args []string) error {
 		return fmt.Errorf("can't parse command flags: %w", err)
 	}
 
-	if cfg.RootFSPath == "" || cfg.KernelPath == "" {
+	if showHelp {
+		fs.Usage()
+		os.Exit(0)
+	}
+
+	if cfg.RootFSPath == "" && len(fs.Args()) == 0 {
 		fs.Usage()
 
 		os.Exit(1)
+	}
+
+	if cfg.KernelPath == "" {
+		fmt.Fprintf(fs.Output(), "kernel path not specified. set env KERNEL_PATH or use option -kernel \n")
+
+		os.Exit(0)
+	}
+
+	if cfg.RootFSPath == "" {
+		cfg.RootFSPath = fs.Args()[0]
 	}
 
 	switch cfg.Arch {
