@@ -3,9 +3,11 @@ package nanemu
 import (
 	"flag"
 	"fmt"
+	"github.com/ebirukov/nanemu/internal/initrd"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,7 +27,7 @@ type Config struct {
 	Memory string
 	Smp    string
 
-	initrdFile string
+	initrdFile *initrd.ImageFile
 	localDir   string
 }
 
@@ -89,15 +91,9 @@ func (cfg *Config) Parse(args []string) error {
 		return fmt.Errorf("unsupported architecture: %s", cfg.Arch)
 	}
 
-	defaultQemuBin := defaultQemuBin[cfg.Arch]
-	switch runtime.GOOS {
-	case "windows":
-		defaultQemuBin = defaultQemuBin + "w.exe"
+	if cfg.RootFSPath == "" {
+		cfg.RootFSPath = fs.Args()[0]
 	}
-
-	cfg.QemuBin = getEnv("QEMU_BIN", defaultQemuBin)
-	cfg.KernelArgs = getEnv(KernelArgs, defaultKernelArgs[cfg.Arch])
-	cfg.QemuCfgArgs = getEnv("QEMU_ARGS", defaultQemuArgs[cfg.Arch])
 
 	return nil
 }
@@ -123,6 +119,16 @@ func hasField(fields []string, prefix string) bool {
 }
 
 func (cfg *Config) BuildCmdArgs() ([]string, error) {
+	defaultQemuBin := defaultQemuBin[cfg.Arch]
+	switch runtime.GOOS {
+	case "windows":
+		defaultQemuBin = defaultQemuBin + "w.exe"
+	}
+
+	cfg.QemuBin = getEnv("QEMU_BIN", defaultQemuBin)
+	cfg.KernelArgs = getEnv(KernelArgs, defaultKernelArgs[cfg.Arch])
+	cfg.QemuCfgArgs = getEnv("QEMU_ARGS", defaultQemuArgs[cfg.Arch])
+
 	kernelArgs := strings.Fields(cfg.KernelArgs)
 	// add console UART for inspect kernel dmesg write to stdout
 	if cfg.FailOnPanic && !hasFieldPrefix(kernelArgs, "console=") {
@@ -168,6 +174,11 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 
 	vmArgs := append(cfg.QemuExtCfgArgs.Args(), strings.Fields(cfg.QemuCfgArgs)...)
 
+	if cfg.Memory == "" && cfg.initrdFile.Size() > DefaultQemuMemoryBytes {
+		memoryKb := int(cfg.initrdFile.Size()+MinQemuMemoryBytes) / 1024 / 1024
+		cfg.Memory = strconv.Itoa(memoryKb+1) + "M"
+	}
+
 	if cfg.Memory != "" && !hasField(vmArgs, "-m") {
 		vmArgs = append(vmArgs, "-m", cfg.Memory)
 	}
@@ -189,7 +200,7 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	vmArgs = append(vmArgs,
 		"-append", strings.Join(kernelArgs, " "),
 		"-kernel", cfg.KernelPath,
-		"-initrd", cfg.initrdFile)
+		"-initrd", cfg.initrdFile.Path())
 
 	return vmArgs, nil
 }

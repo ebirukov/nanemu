@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ebirukov/nanemu/internal/initrd"
 	"github.com/ebirukov/nanemu/internal/text"
-	"github.com/ebirukov/nanemu/pkg/cpio"
 	"io"
 	"log"
 	"os"
@@ -48,22 +48,18 @@ func (app *App) Init() (err error) {
 		app.ctx, app.cancel = context.WithCancel(context.Background())
 	}
 
-	initrdFile, err := os.CreateTemp(".", "initramfs.cpio")
+	initrdFile, err := initrd.CreateImage("initramfs.cpio", app.config.RootFSPath, defaultPermBitsMask[runtime.GOOS])
 	if err != nil {
-		return fmt.Errorf("could not create file initramfs.cpio: %v", err)
+		return fmt.Errorf("could not create initrd: %w", err)
 	}
 
 	defer initrdFile.Close()
 
+	app.config.initrdFile = initrdFile
+
 	app.onShutdown = append(app.onShutdown, func(app *App) error {
-		return os.Remove(initrdFile.Name())
+		return initrdFile.Remove()
 	})
-
-	if err = cpio.Create(initrdFile, app.config.RootFSPath, defaultPermBitsMask[runtime.GOOS]); err != nil {
-		return fmt.Errorf("could not create cpio fs %s: %v", initrdFile.Name(), err)
-	}
-
-	app.config.initrdFile = initrdFile.Name()
 
 	if app.qemuArgs, err = app.config.BuildCmdArgs(); err != nil {
 		return fmt.Errorf("can't build command args: %w", err)

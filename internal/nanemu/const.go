@@ -2,9 +2,13 @@ package nanemu
 
 import "time"
 
-const DefaultExecTimeout = 30 * time.Minute
-const KernelArgs = "KERNEL_ARGS"
-const PanicMsg = "Kernel panic"
+const (
+	DefaultExecTimeout     = 30 * time.Minute
+	KernelArgs             = "KERNEL_ARGS"
+	PanicMsg               = "Kernel panic"
+	DefaultQemuMemoryBytes = 1 << 27
+	MinQemuMemoryBytes     = 1 << 29
+)
 
 var (
 	defaultQemuArgs   = map[string]string{}
