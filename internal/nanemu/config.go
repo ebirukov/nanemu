@@ -81,6 +81,11 @@ func (cfg *Config) Parse(args []string) error {
 		os.Exit(0)
 	}
 
+	kernelArch, _ := checkKernelArch(cfg.KernelPath)
+	if kernelArch != "" && kernelArch != cfg.Arch {
+		fmt.Fprintf(fs.Output(), "\033[31mperhaps kernel image %s compile for %s; qemu expected arch: %s\n\033[0m", filepath.Base(cfg.KernelPath), kernelArch, cfg.Arch)
+	}
+
 	if cfg.RootFSPath == "" {
 		cfg.RootFSPath = fs.Args()[0]
 	}
