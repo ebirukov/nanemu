@@ -1,8 +1,12 @@
-#extension flag - configute qemu user network.
-# see -netdev user in https://www.qemu.org/docs/master/system/qemu-manpage.html.
+#extension flag - configure qemu user network.
+# see https://www.qemu.org/docs/master/system/qemu-manpage.html#hxtool-5.
 # syntax: -net [net=addr][,host=addr][,dhcpstart=addr][dns=addr][hostfwd=][guestfwd=][,...]
+# hostfwd or guestfwd syntax: hostfwd=<[tcp|udp]:[hostaddr]:[hostport]-[vmaddr]:guestport>
 # examples:
+# -net "" -> -net net=10.0.2.1/24,host=10.0.2.2,dns=10.0.2.3,dhcpstart=10.0.2.15
 # -net net=192.168.0.0/24,host=192.168.0.1,dns=192.168.0.3,dhcpstart=192.168.0.10
 # -net net=10.10.0.0/24,hostfwd=udp::12345-:12345,hostfwd=tcp::8080-:80
--device virtio-net-pci,netdev=usernet
--netdev user,id=usernet,%s
+# -net hostfwd=tcp:127.0.0.1:1234-10.0.2.15:1234 (default host and vm address)
+# -net hostfwd=tcp::8080-:80 (default host and vm address)
+# -net hostfwd=::-:1234 (random tcp host port)
+-nic model=virtio-net-pci,%s

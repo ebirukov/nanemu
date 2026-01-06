@@ -1,9 +1,0 @@
-#extension flag - network port forward to vm.
-# syntax: -port-fwd <{tcp|udp}:[hostaddr]:[hostport]-[vmaddr]:guestport>
-# examples:
-# -port-fwd tcp::1234-:1234 (default host and vm address)
-# -port-fwd udp::-:1234 (random host port)
-# vm ip must be 10.0.2.15 (see https://www.qemu.org/docs/master/system/devices/net.html)
-#
--device virtio-net-pci,netdev=net0
--netdev user,id=net0,dns=10.0.2.3,hostfwd=%s
