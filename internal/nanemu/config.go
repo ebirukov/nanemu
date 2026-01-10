@@ -23,6 +23,7 @@ type Config struct {
 	ExecTimeout    time.Duration
 	FailOnPanic    bool
 	Loglevel       string
+	Terminal       bool
 
 	Memory string
 	Smp    string
@@ -49,6 +50,7 @@ func (cfg *Config) Parse(args []string) error {
 	fs.StringVar(&cfg.Memory, "memory", "", "Memory limit")
 	fs.StringVar(&cfg.Smp, "smp", "", "Cpus limit")
 	fs.StringVar(&cfg.Loglevel, "loglevel", "3", "kernel log level")
+	fs.BoolVar(&cfg.Terminal, "tty", true, "terminal support")
 
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "Usage: \n nanemu [Options] -kernel /path/to/linux/kernel /path/to/rootfs \n")
@@ -138,6 +140,10 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	// add console UART for inspect kernel dmesg write to stdout
 	if cfg.FailOnPanic && !hasFieldPrefix(kernelArgs, "console=") {
 		kernelArgs = append(kernelArgs, defaultKernelArgs[cfg.Arch])
+	}
+
+	if cfg.Terminal {
+		kernelArgs = append(kernelArgs, "panic=-1")
 	}
 
 	if cfg.Loglevel != "" && !hasFieldPrefix(kernelArgs, "loglevel=") && !hasField(kernelArgs, "quiet") {

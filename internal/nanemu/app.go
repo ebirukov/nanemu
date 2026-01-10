@@ -94,7 +94,7 @@ func (app *App) Run() error {
 
 	app.qemuCmd = exec.CommandContext(app.ctx, app.config.QemuBin, app.qemuArgs...)
 
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
 		app.stopSig = make(chan os.Signal, 1)
 		defer close(app.stopSig)
 
@@ -120,27 +120,32 @@ func (app *App) Run() error {
 
 	app.qemuCmd.Stderr = os.Stderr
 
-	cmdStdIn, err := app.qemuCmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("can't get stdin pipe: %w", err)
+	if !app.config.Terminal {
+		cmdStdIn, err := app.qemuCmd.StdinPipe()
+		if err != nil {
+			return fmt.Errorf("can't get stdin pipe: %w", err)
+		}
+
+		defer cmdStdIn.Close()
+
+		go io.Copy(cmdStdIn, os.Stdin)
+
+		cmdStdOut, err := app.qemuCmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("can't get stdout pipe: %w", err)
+		}
+
+		defer cmdStdOut.Close()
+
+		if app.config.FailOnPanic {
+			cmdStdOut = io.NopCloser(text.NewLineMatchReader(cmdStdOut, PanicMsg, app.HandleKernelPanic))
+		}
+
+		go io.Copy(log.Writer(), cmdStdOut)
+	} else {
+		app.qemuCmd.Stdout = os.Stdout
+		app.qemuCmd.Stdin = os.Stdin
 	}
-
-	defer cmdStdIn.Close()
-
-	go io.Copy(cmdStdIn, os.Stdin)
-
-	cmdStdOut, err := app.qemuCmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("can't get stdout pipe: %w", err)
-	}
-
-	defer cmdStdOut.Close()
-
-	if app.config.FailOnPanic {
-		cmdStdOut = io.NopCloser(text.NewLineMatchReader(cmdStdOut, PanicMsg, app.HandleKernelPanic))
-	}
-
-	go io.Copy(log.Writer(), cmdStdOut)
 
 	printCmd(app.qemuCmd)
 

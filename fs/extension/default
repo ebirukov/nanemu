@@ -1,2 +1,3 @@
 -serial mon:stdio
 -display none
+-no-reboot
