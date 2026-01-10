@@ -50,7 +50,7 @@ func (cfg *Config) Parse(args []string) error {
 	fs.StringVar(&cfg.Memory, "memory", "", "Memory limit")
 	fs.StringVar(&cfg.Smp, "smp", "", "Cpus limit")
 	fs.StringVar(&cfg.Loglevel, "loglevel", "3", "kernel log level")
-	fs.BoolVar(&cfg.Terminal, "tty", true, "terminal support")
+	fs.BoolVar(&cfg.Terminal, "t", false, "terminal interaction")
 
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "Usage: \n nanemu [Options] -kernel /path/to/linux/kernel /path/to/rootfs \n")
@@ -142,9 +142,7 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		kernelArgs = append(kernelArgs, defaultKernelArgs[cfg.Arch])
 	}
 
-	if cfg.Terminal {
-		kernelArgs = append(kernelArgs, "panic=-1")
-	}
+	kernelArgs = append(kernelArgs, "panic=-1")
 
 	if cfg.Loglevel != "" && !hasFieldPrefix(kernelArgs, "loglevel=") && !hasField(kernelArgs, "quiet") {
 		kernelArgs = append(kernelArgs, "loglevel="+cfg.Loglevel)
