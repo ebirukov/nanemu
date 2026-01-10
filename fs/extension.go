@@ -37,16 +37,14 @@ func CfgDir() string {
 			if ex {
 				path = filepath.Join(homePath, cfgDirName)
 				err = os.Mkdir(path, 0755)
-				if err != nil && !os.IsPermission(err) && !os.IsExist(err) {
+				if err != nil && !os.IsExist(err) {
 					log.Fatal(fmt.Errorf("can't create nanemu config directory: %w", err))
 				}
-			}
-		}
-		if os.IsPermission(err) {
-			path = cfgDirName
-			err = os.Mkdir(path, 0755)
-			if err != nil && !os.IsExist(err) {
-				log.Fatal(fmt.Errorf("can't create nanemu config directory: %w", err))
+			} else {
+				err = os.Mkdir(path, 0755)
+				if err != nil && !os.IsExist(err) {
+					log.Fatal(fmt.Errorf("can't create nanemu config directory: %w", err))
+				}
 			}
 		}
 
