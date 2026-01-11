@@ -20,6 +20,7 @@ type Config struct {
 	KernelArgs     string
 	KernelPath     string
 	RootFSPath     string
+	InitCmdArgs    []string
 	ExecTimeout    time.Duration
 	FailOnPanic    bool
 	Loglevel       string
@@ -44,7 +45,7 @@ func (cfg *Config) Parse(args []string) error {
 	fs.BoolVar(&showHelp, "h", false, "show help")
 	fs.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
 	fs.StringVar(&cfg.KernelPath, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image (default $KERNEL_PATH)")
-	fs.StringVar(&cfg.RootFSPath, "rootfs", "", "Path to initramfs root directory")
+	fs.StringVar(&cfg.RootFSPath, "rootfs", "", "Deprecated. Path to initramfs root directory")
 	fs.BoolVar(&cfg.FailOnPanic, "fail-on-panic", true, "Fail on kernel panic")
 	fs.DurationVar(&cfg.ExecTimeout, "timeout", 0, "Max time of qemu execution")
 	fs.StringVar(&cfg.Memory, "memory", "", "Memory limit")
@@ -71,10 +72,10 @@ func (cfg *Config) Parse(args []string) error {
 		os.Exit(0)
 	}
 
-	if cfg.RootFSPath == "" && len(fs.Args()) == 0 {
-		fs.Usage()
-
-		os.Exit(1)
+	switch cfg.Arch {
+	case "amd64", "arm64":
+	default:
+		return fmt.Errorf("unsupported architecture: %s", cfg.Arch)
 	}
 
 	if cfg.KernelPath == "" {
@@ -88,18 +89,17 @@ func (cfg *Config) Parse(args []string) error {
 		fmt.Fprintf(fs.Output(), "\033[31mperhaps kernel image %s compile for %s; qemu expected arch: %s; use -arch opt\n\033[0m", filepath.Base(cfg.KernelPath), kernelArch, cfg.Arch)
 	}
 
-	if cfg.RootFSPath == "" {
-		cfg.RootFSPath = fs.Args()[0]
+	// -rootfs flag backward support
+	if cfg.RootFSPath == "" && len(fs.Args()) == 0 {
+		fmt.Fprintf(fs.Output(), "rootfs path not specified\n")
+
+		fs.Usage()
+
+		os.Exit(0)
 	}
 
-	switch cfg.Arch {
-	case "amd64", "arm64":
-	default:
-		return fmt.Errorf("unsupported architecture: %s", cfg.Arch)
-	}
-
-	if cfg.RootFSPath == "" {
-		cfg.RootFSPath = fs.Args()[0]
+	if len(fs.Args()) > 0 {
+		cfg.RootFSPath, cfg.InitCmdArgs = fs.Args()[0], fs.Args()[1:]
 	}
 
 	return nil
@@ -175,10 +175,11 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		}
 	}
 
-	if initFile != "" &&
-		!hasFieldPrefix(kernelArgs, "rdinit=") &&
-		!hasFieldPrefix(kernelArgs, "init=") {
-		kernelArgs = append(kernelArgs, "rdinit="+initFile)
+	if !hasFieldPrefix(kernelArgs, "rdinit=") && !hasFieldPrefix(kernelArgs, "init=") {
+		if len(cfg.InitCmdArgs) > 0 || len(initFile) > 0 {
+			rdinit := fmt.Sprintf("%s %s", initFile, strings.Join(cfg.InitCmdArgs, " "))
+			kernelArgs = append(kernelArgs, "rdinit="+strings.TrimSpace(rdinit))
+		}
 	}
 
 	vmArgs := append(cfg.QemuExtCfgArgs.Args(), strings.Fields(cfg.QemuCfgArgs)...)
