@@ -105,6 +105,7 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 		return nil
 	}
 
+	name = filepath.ToSlash(name)
 	hdr, err := cpio.FileInfoHeader(info, name)
 	if err != nil {
 		return fmt.Errorf("failed to create cpio header for %s: %w", name, err)
