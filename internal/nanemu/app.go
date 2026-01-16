@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/ebirukov/nanemu/internal/initrd"
 	"github.com/ebirukov/nanemu/internal/text"
+	"golang.org/x/term"
 	"io"
 	"log"
 	"os"
@@ -128,7 +129,19 @@ func (app *App) Run() error {
 
 		defer cmdStdIn.Close()
 
-		go io.Copy(cmdStdIn, os.Stdin)
+		if !app.config.Interactive {
+			go io.Copy(cmdStdIn, os.Stdin)
+		} else {
+			fd := int(os.Stdin.Fd())
+			oldState, err := term.GetState(fd)
+			if err != nil {
+				return fmt.Errorf("cannot get terminal state: %w", err)
+			}
+
+			defer term.Restore(fd, oldState)
+
+			go app.interactive(cmdStdIn)
+		}
 
 		cmdStdOut, err := app.qemuCmd.StdoutPipe()
 		if err != nil {
@@ -142,9 +155,21 @@ func (app *App) Run() error {
 		}
 
 		go io.Copy(log.Writer(), cmdStdOut)
-	} else {
-		app.qemuCmd.Stdout = os.Stdout
-		app.qemuCmd.Stdin = os.Stdin
+	}
+
+	if app.config.Terminal {
+		pty, err := app.openPty()
+		if err != nil {
+			return fmt.Errorf("failed to open pty: %w", err)
+		}
+
+		if app.config.Interactive {
+			go app.interactive(pty)
+		} else {
+			go io.Copy(pty, os.Stdin)
+		}
+
+		go io.Copy(os.Stdout, pty)
 	}
 
 	printCmd(app.qemuCmd)

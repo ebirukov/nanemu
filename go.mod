@@ -4,5 +4,8 @@ go 1.24.5
 
 require (
 	github.com/cavaliergopher/cpio v1.0.1
-	golang.org/x/sys v0.37.0
+	github.com/chzyer/readline v1.5.1
+	github.com/creack/pty v1.1.24
+	golang.org/x/sys v0.40.0
+	golang.org/x/term v0.39.0
 )

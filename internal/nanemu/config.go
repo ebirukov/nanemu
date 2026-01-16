@@ -24,7 +24,9 @@ type Config struct {
 	ExecTimeout    time.Duration
 	FailOnPanic    bool
 	Loglevel       string
+	Serial         string
 	Terminal       bool
+	Interactive    bool
 
 	Memory string
 	Smp    string
@@ -50,8 +52,10 @@ func (cfg *Config) Parse(args []string) error {
 	fs.DurationVar(&cfg.ExecTimeout, "timeout", 0, "Max time of qemu execution")
 	fs.StringVar(&cfg.Memory, "memory", "", "Memory limit")
 	fs.StringVar(&cfg.Smp, "smp", "", "Cpus limit")
+	fs.StringVar(&cfg.Serial, "s", "mon:stdio", "serial port to host device, standard io by default")
 	fs.StringVar(&cfg.Loglevel, "loglevel", "3", "kernel log level")
-	fs.BoolVar(&cfg.Terminal, "t", false, "terminal interaction")
+	fs.BoolVar(&cfg.Terminal, "t", false, "create pseudo tty")
+	fs.BoolVar(&cfg.Interactive, "i", false, "terminal interaction")
 
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "Usage: \n nanemu [Options] -kernel /path/to/linux/kernel /path/to/rootfs \n")
@@ -191,6 +195,10 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 
 	if cfg.Memory != "" && !hasField(vmArgs, "-m") {
 		vmArgs = append(vmArgs, "-m", cfg.Memory)
+	}
+
+	if !hasField(vmArgs, "-serial") {
+		vmArgs = append(vmArgs, "-serial", cfg.Serial)
 	}
 
 	if cfg.Smp != "" && !hasField(vmArgs, "-smp") {
