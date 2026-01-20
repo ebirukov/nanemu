@@ -8,6 +8,7 @@ const (
 	PanicMsg               = "Kernel panic"
 	DefaultQemuMemoryBytes = 1 << 27
 	MinQemuMemoryBytes     = 1 << 29
+	FallbackKernelURI      = "oci://docker.io/ebirukov/linux-kernel"
 )
 
 var (

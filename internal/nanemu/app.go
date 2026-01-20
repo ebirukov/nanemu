@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ebirukov/nanemu/internal/initrd"
+	"github.com/ebirukov/nanemu/internal/resource"
 	"github.com/ebirukov/nanemu/internal/text"
 	"golang.org/x/term"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -66,10 +68,39 @@ func (app *App) Init() (err error) {
 		return fmt.Errorf("can't build command args: %w", err)
 	}
 
+	r := resource.DefaultFetcher
+	r.AddFetcher("oci", resource.NewResolver(app.config.Arch))
+	r.AddFetcher("https", resource.NewHTTPFetcher(app.config.Arch))
+
+	kernelPath, err := r.FetchPath(app.config.KernelURI)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("can't resolve kernel path: %w", err)
+		}
+
+		kernelPath, err = r.FetchPath(FallbackKernelURI)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\u001B[31mcan't get kernel from uri: %s\n\u001B[0m", err)
+		}
+	}
+
+	if kernelPath == "" {
+		return fmt.Errorf("kernel path not specified. set env KERNEL_PATH or use option -kernel")
+	}
+
+	kernelArch, _ := checkKernelArch(kernelPath)
+	if kernelArch != "" && kernelArch != app.config.Arch {
+		fmt.Fprintf(os.Stderr, "\033[31mperhaps kernel image %s compile for %s; qemu expected arch: %s; use -arch opt\n\033[0m", filepath.Base(kernelPath), kernelArch, app.config.Arch)
+	}
+
+	app.qemuArgs = append(app.qemuArgs,
+		"-kernel", kernelPath,
+		"-initrd", initrdFile.Path())
+
 	return nil
 }
 
-func (app *App) shutdown() {
+func (app *App) Shutdown() {
 	for _, shutdown := range app.onShutdown {
 		if err := shutdown(app); err != nil {
 			log.Printf("WARNING: shutdown app failed: %v", err)
@@ -115,7 +146,7 @@ func (app *App) Run() error {
 
 	go func() {
 		<-app.ctx.Done()
-		app.shutdown()
+		app.Shutdown()
 		close(app.stop)
 	}()
 

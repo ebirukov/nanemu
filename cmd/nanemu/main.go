@@ -29,6 +29,8 @@ func main() {
 	app := nanemu.NewApp(fs.CfgDir())
 
 	if err := app.Init(); err != nil {
+		app.Shutdown()
+
 		log.Fatalf("failed to initialize app: %v", err)
 	}
 

@@ -2,4 +2,6 @@
 
 go install github.com/ebirukov/nanemu/cmd/nanemu@latest
 
-nanemu -kernel kernel/vmlinuz-5.4.43-1-arm64 -rootfs build/hello-arm64 -arch arm64 -loglevel=4
+nanemu -kernel https://dl-cdn.alpinelinux.org/alpine/edge/releases/x86_64/netboot/vmlinuz-virt -arch amd64 build/hello-amd64
+
+nanemu -kernel https://dl-cdn.alpinelinux.org/alpine/edge/releases/aarch64/netboot/vmlinuz-virt -arch arm64 build/hello-arm64

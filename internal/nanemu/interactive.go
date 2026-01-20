@@ -12,10 +12,8 @@ import (
 
 func (app *App) interactive(out io.Writer) error {
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          "# ",
 		HistoryFile:     filepath.Join(fs.CfgDir(), ".history"),
 		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
 	})
 
 	if err != nil {
@@ -27,16 +25,14 @@ func (app *App) interactive(out io.Writer) error {
 	for {
 		line, err := rl.Readline()
 		if err != nil {
-			if errors.Is(err, readline.ErrInterrupt) {
+			if errors.Is(err, readline.ErrInterrupt) || errors.Is(err, io.EOF) {
 				if app.qemuCmd != nil && app.qemuCmd.Process != nil {
 					app.qemuCmd.Process.Signal(syscall.SIGINT)
 				}
 
-				return err
-			}
-			if err == io.EOF {
 				return nil
 			}
+
 			return err
 		}
 
