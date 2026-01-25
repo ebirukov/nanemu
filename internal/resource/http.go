@@ -24,9 +24,11 @@ func (r *HTTPFetcher) ByURI(uri *url.URL) (string, error) {
 	downloadPath := filepath.Join(fs.CfgDir(), "kernel", r.arch)
 	os.Mkdir(downloadPath, 0755)
 
-	fw, err := os.OpenFile(filepath.Join(downloadPath, "vmlinuz"), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0755)
+	fName := filepath.Join(downloadPath, "vmlinuz")
+
+	fw, err := os.OpenFile(fName, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0755)
 	if err != nil {
-		return "", fmt.Errorf("can't create file %s: %w", fw.Name(), err)
+		return "", fmt.Errorf("can't create file %s: %w", fName, err)
 	}
 
 	defer fw.Close()
@@ -39,7 +41,7 @@ func (r *HTTPFetcher) ByURI(uri *url.URL) (string, error) {
 		return "", fmt.Errorf("can't download %s: %w", uri, err)
 	}
 
-	return filepath.Join(downloadPath, "vmlinuz"), nil
+	return fName, nil
 }
 
 func download(url string, fetch func(io.Reader) error) error {

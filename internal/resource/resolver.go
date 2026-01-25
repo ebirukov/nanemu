@@ -33,7 +33,7 @@ func (r BySchemaFetchers) FetchPath(uri string) (string, error) {
 	}
 
 	if kernelUri.Path == "" {
-		return "", fmt.Errorf("empty path of %s", kernelUri)
+		return "", fmt.Errorf("empty path of URI %s", uri)
 	}
 
 	schema := kernelUri.Scheme

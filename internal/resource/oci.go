@@ -35,7 +35,7 @@ func (r *OCIRegistryResolver) ByURI(uri *url.URL) (string, error) {
 		return "", nil
 	}
 
-	return DefaultFetcher.FetchPath(downloadPath)
+	return DefaultFetcher.FetchPath("file://" + downloadPath)
 }
 
 func Download(image string, arch, path string) error {
