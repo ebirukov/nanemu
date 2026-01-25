@@ -32,6 +32,11 @@ func (r BySchemaFetchers) FetchPath(uri string) (string, error) {
 		return "", fmt.Errorf("can't parse URI: %w", err)
 	}
 
+	if kernelUri.Path == "" && kernelUri.Opaque != "" {
+		kernelUri.Path = uri
+		kernelUri.Scheme = "file"
+	}
+
 	if kernelUri.Path == "" {
 		return "", fmt.Errorf("empty path of URI %s", uri)
 	}
