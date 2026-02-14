@@ -86,7 +86,7 @@ func (cl *Client) HttpGet(url string, acceptedMediaTypes ...string) (*http.Respo
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d; URL: %s, req Headers: %s; resp Headers: %s", resp.StatusCode, req.URL, req.Header, resp.Header)
+		return nil, fmt.Errorf("HTTP %d; URL: %s", resp.StatusCode, req.URL)
 	}
 
 	return resp, nil

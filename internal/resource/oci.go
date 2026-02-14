@@ -9,48 +9,82 @@ import (
 	"github.com/ebirukov/nanemu/pkg/tar"
 	spec "github.com/opencontainers/image-spec/specs-go/v1"
 	"io"
-	"log"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 )
 
-const DockerRegistryURL = "https://registry-1.docker.io/v2"
+const DockerRegistryURL = "registry-1.docker.io"
+
+type Image struct {
+	raw      string
+	Repo     string
+	Tag      string
+	Name     string
+	Registry string
+}
+
+func (i *Image) String() string {
+	return i.raw
+}
+
+func parseImage(uri *url.URL) *Image {
+	var image Image
+	imageRef := uri.Path[1:]
+	image.Registry = DockerRegistryURL
+	if uri.Host != "" {
+		image.Registry = uri.Host
+	}
+
+	image.raw = imageRef
+	parts := strings.Split(imageRef, ":")
+	image.Repo = parts[0]
+	image.Tag = "latest"
+	if len(parts) > 1 {
+		image.Tag = parts[1]
+	}
+
+	return &image
+}
 
 type OCIRegistryResolver struct {
 	arch string
 }
 
-func NewResolver(arch string) *OCIRegistryResolver {
+func NewOCIResolver(arch string) *OCIRegistryResolver {
 	return &OCIRegistryResolver{
 		arch: arch,
 	}
 }
 
 func (r *OCIRegistryResolver) ByURI(uri *url.URL) (string, error) {
-	downloadPath := filepath.Join(fs.CfgDir(), "kernel", r.arch)
-	if err := Download(uri.Path[1:], r.arch, downloadPath); err != nil {
-		log.Printf("can't download kernel: %s/n", err)
+	image := parseImage(uri)
+	downloadPath := filepath.Join(fs.CfgDir(), "docker-image", image.Repo, image.Tag, r.arch)
+	if _, err := os.Stat(downloadPath); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("downloading docker image:", image.String())
+			if err := Download(image, r.arch, downloadPath); err != nil {
+				fmt.Printf("can't download image from %s: %s\n", uri, err)
 
-		return "", nil
+				return "", nil
+			}
+
+			return downloadPath, nil
+		}
+
+		return "", err
 	}
 
-	return DefaultFetcher.FetchPath(downloadPath)
+	return downloadPath, nil
 }
 
-func Download(image string, arch, path string) error {
-	parts := strings.Split(image, ":")
-	imageRepo := parts[0]
-	ref := "latest"
-	if len(parts) > 1 {
-		ref = parts[1]
-	}
-
-	repoCli := repo.NewClient(imageRepo, DockerRegistryURL)
+func Download(image *Image, arch, path string) error {
+	repoCli := repo.NewClient(image.Repo, "https://"+image.Registry+"/v2")
 
 	var manifest spec.Manifest
 
-	if err := downloadManifest(repoCli, ref, arch, &manifest); err != nil {
+	if err := downloadManifest(repoCli, image.Tag, arch, &manifest); err != nil {
 		return fmt.Errorf("can't get manifest: %v", err)
 	}
 

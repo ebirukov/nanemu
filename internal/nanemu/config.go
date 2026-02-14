@@ -3,7 +3,6 @@ package nanemu
 import (
 	"flag"
 	"fmt"
-	"github.com/ebirukov/nanemu/fs"
 	"github.com/ebirukov/nanemu/internal/initrd"
 	"os"
 	"path/filepath"
@@ -97,7 +96,7 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	if cfg.KernelURI == "" {
-		cfg.KernelURI = filepath.Join(fs.CfgDir(), "kernel", cfg.Arch)
+		cfg.KernelURI = FallbackKernelURI
 	}
 
 	// -rootfs flag backward support
@@ -164,7 +163,11 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		kernelArgs = append(kernelArgs, "PATH=/")
 	}
 
-	info, _ := os.Stat(cfg.RootFSPath)
+	info, err := os.Stat(cfg.RootFSPath)
+	if err != nil {
+		return nil, fmt.Errorf("can't stat rootfs path: %w", err)
+	}
+
 	var initFile string
 	if !info.IsDir() {
 		initFile = filepath.Base(cfg.RootFSPath)

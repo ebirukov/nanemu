@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -51,6 +52,23 @@ func (app *App) Init() (err error) {
 		app.ctx, app.cancel = context.WithCancel(context.Background())
 	}
 
+	r := resource.DefaultFetcher
+	r.AddFetcher("oci", resource.NewOCIResolver(app.config.Arch))
+	r.AddFetcher("https", resource.NewHTTPFetcher(app.config.Arch))
+	r.AddFetcher("docker", resource.FetcherFn(func(url *url.URL) (string, error) {
+		s := strings.Split(url.Path[1:], "/")
+		if len(s) == 1 {
+			url.Path = url.Path[:1] + "library/" + url.Path[1:]
+		}
+
+		return resource.NewOCIResolver(app.config.Arch).ByURI(url)
+	}))
+
+	app.config.RootFSPath, err = r.FetchPath(app.config.RootFSPath)
+	if err != nil {
+		return fmt.Errorf("can't resolve rootfs path: %w", err)
+	}
+
 	initrdFile, err := initrd.CreateImage("initramfs.cpio", app.config.RootFSPath, defaultPermBitsMask[runtime.GOOS])
 	if err != nil {
 		return fmt.Errorf("could not create initrd: %w", err)
@@ -68,24 +86,22 @@ func (app *App) Init() (err error) {
 		return fmt.Errorf("can't build command args: %w", err)
 	}
 
-	r := resource.DefaultFetcher
-	r.AddFetcher("oci", resource.NewResolver(app.config.Arch))
-	r.AddFetcher("https", resource.NewHTTPFetcher(app.config.Arch))
-
 	kernelPath, err := r.FetchPath(app.config.KernelURI)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("can't resolve kernel path: %w", err)
 		}
 
-		kernelPath, err = r.FetchPath(FallbackKernelURI)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "\u001B[31mcan't get kernel from uri: %s\n\u001B[0m", err)
-		}
+		fmt.Fprintf(os.Stderr, "\u001B[31mcan't get kernel from uri: %s\n\u001B[0m", err)
 	}
 
 	if kernelPath == "" {
 		return fmt.Errorf("kernel path not specified. set env KERNEL_PATH or use option -kernel")
+	}
+
+	kernelPath, err = r.FetchPath(kernelPath)
+	if err != nil {
+		return fmt.Errorf("can't resolve kernel path '%s': %w", kernelPath, err)
 	}
 
 	kernelArch, _ := checkKernelArch(kernelPath)

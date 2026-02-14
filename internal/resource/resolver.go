@@ -27,21 +27,21 @@ var DefaultFetcher = BySchemaFetchers{
 }
 
 func (r BySchemaFetchers) FetchPath(uri string) (string, error) {
-	kernelUri, err := url.Parse(uri)
+	resourceUri, err := url.Parse(uri)
 	if err != nil {
 		return "", fmt.Errorf("can't parse URI: %w", err)
 	}
 
-	if kernelUri.Path == "" && kernelUri.Opaque != "" {
-		kernelUri.Path = uri
-		kernelUri.Scheme = "file"
+	if resourceUri.Path == "" && resourceUri.Opaque != "" {
+		resourceUri.Path = uri
+		resourceUri.Scheme = "file"
 	}
 
-	if kernelUri.Path == "" {
+	if resourceUri.Path == "" {
 		return "", fmt.Errorf("empty path of URI %s", uri)
 	}
 
-	schema := kernelUri.Scheme
+	schema := resourceUri.Scheme
 	if schema == "" {
 		schema = "file"
 	}
@@ -51,7 +51,7 @@ func (r BySchemaFetchers) FetchPath(uri string) (string, error) {
 		return "", fmt.Errorf("unsupported schema '%s' of URI %s\n", schema, uri)
 	}
 
-	path, err := fetcher.ByURI(kernelUri)
+	path, err := fetcher.ByURI(resourceUri)
 	if err != nil {
 		return "", fmt.Errorf("can't fetch URI: %w", err)
 	}
@@ -61,6 +61,10 @@ func (r BySchemaFetchers) FetchPath(uri string) (string, error) {
 
 func FetchFilePath(uri *url.URL) (string, error) {
 	path := uri.Path
+
+	if absPath, err := filepath.Abs(path); err == nil {
+		path = absPath
+	}
 
 	info, err := os.Stat(path)
 	if err != nil {
