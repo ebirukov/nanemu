@@ -164,14 +164,16 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		kernelArgs = append(kernelArgs, "PATH=/")
 	}
 
-	info, err := os.Stat(cfg.RootFSPath)
-	if err != nil {
-		return nil, fmt.Errorf("can't stat rootfs path: %w", err)
-	}
-
 	var initFile string
+
 	/*
-		if !info.IsDir() {
+
+		info, err := os.Stat(cfg.RootFSPath)
+		if err != nil {
+			return nil, fmt.Errorf("can't stat rootfs path: %w", err)
+		}
+
+			if !info.IsDir() {
 			initFile = filepath.Base(cfg.RootFSPath)
 		}
 
