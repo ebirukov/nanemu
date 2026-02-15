@@ -174,7 +174,7 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		initFile = filepath.Base(cfg.RootFSPath)
 	}
 
-	if info.IsDir() {
+	/*	if info.IsDir() {
 		entries, err := os.ReadDir(cfg.RootFSPath)
 		if err != nil {
 			return nil, fmt.Errorf("can't read rootfs directory: %w", err)
@@ -193,7 +193,7 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		if len(fileEntry) == 1 && fileEntry[0].Name() != "init" {
 			initFile = filepath.Base(fileEntry[0].Name())
 		}
-	}
+	}*/
 
 	if !hasFieldPrefix(kernelArgs, "rdinit=") && !hasFieldPrefix(kernelArgs, "init=") {
 		if len(cfg.InitCmdArgs) > 0 || len(initFile) > 0 {
