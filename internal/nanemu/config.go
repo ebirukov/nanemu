@@ -3,13 +3,14 @@ package nanemu
 import (
 	"flag"
 	"fmt"
-	"github.com/ebirukov/nanemu/internal/initrd"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ebirukov/nanemu/internal/initrd"
 )
 
 type Config struct {
@@ -181,7 +182,7 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		var fileEntry []os.DirEntry
 		for _, entry := range entries {
 			if entry.IsDir() {
-				continue
+				break
 			}
 			fileEntry = append(fileEntry, entry)
 		}
