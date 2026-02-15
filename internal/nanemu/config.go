@@ -181,8 +181,12 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 		}
 		var fileEntry []os.DirEntry
 		for _, entry := range entries {
-			if entry.IsDir() {
-				break
+			if !entry.Type().IsRegular() {
+				continue
+			}
+			info, _ := entry.Info()
+			if info != nil && info.Size() == 0 {
+				continue
 			}
 			fileEntry = append(fileEntry, entry)
 		}
