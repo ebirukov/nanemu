@@ -64,9 +64,12 @@ func (app *App) Init() (err error) {
 		return resource.NewOCIResolver(app.config.Arch).ByURI(url)
 	}))
 
-	app.config.RootFSPath, err = r.FetchPath(app.config.RootFSPath)
+	_, err = os.Stat(app.config.RootFSPath)
 	if err != nil {
-		return fmt.Errorf("can't resolve rootfs path: %w", err)
+		app.config.RootFSPath, err = r.FetchPath(app.config.RootFSPath)
+		if err != nil {
+			return fmt.Errorf("can't resolve rootfs path: %w", err)
+		}
 	}
 
 	initrdFile, err := initrd.CreateImage("initramfs.cpio", app.config.RootFSPath, defaultPermBitsMask[runtime.GOOS])
