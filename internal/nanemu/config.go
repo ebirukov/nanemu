@@ -14,6 +14,7 @@ import (
 )
 
 type Config struct {
+	Version        bool
 	Arch           string
 	QemuBin        string
 	QemuCfgArgs    string
@@ -57,6 +58,7 @@ func (cfg *Config) Parse(args []string) error {
 	cfg.QemuExtCfgArgs = NewExtFlags(opts)
 
 	var showHelp bool
+	opts.BoolVar(&cfg.Version, "v", false, "version")
 	opts.BoolVar(&showHelp, "h", false, "show help")
 	opts.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
 	opts.StringVar(&cfg.KernelURI, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image (default $KERNEL_PATH)")
@@ -85,6 +87,17 @@ func (cfg *Config) Parse(args []string) error {
 		return fmt.Errorf("can't parse command flags: %w", err)
 	}
 
+	if cfg.Version {
+		info, err := BuildInfo()
+		if err != nil {
+			return fmt.Errorf("can't read build info: %w", err)
+		}
+
+		fmt.Printf("Version: %s\n", info.Main.Version)
+
+		os.Exit(0)
+	}
+
 	if showHelp {
 		opts.Usage()
 		os.Exit(0)
@@ -93,7 +106,10 @@ func (cfg *Config) Parse(args []string) error {
 	switch cfg.Arch {
 	case "amd64", "arm64":
 	default:
-		return fmt.Errorf("unsupported architecture: %s", cfg.Arch)
+		fmt.Fprintf(opts.Output(), "unsupported architecture: %s", cfg.Arch)
+		opts.Usage()
+
+		os.Exit(0)
 	}
 
 	if cfg.KernelURI == "" {

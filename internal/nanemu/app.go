@@ -41,11 +41,15 @@ func NewApp(cfgDir string) *App {
 	}
 }
 
-func (app *App) Init() (err error) {
-	if err = app.config.Parse(os.Args); err != nil {
-		return fmt.Errorf("can't parse config: %w", err)
+func (app *App) ParseCfg(args []string) (cfg *Config, err error) {
+	if err := app.config.Parse(args); err != nil {
+		return nil, err
 	}
 
+	return app.config, nil
+}
+
+func (app *App) Init() (err error) {
 	if app.config.ExecTimeout > 0 {
 		app.ctx, app.cancel = context.WithTimeout(context.Background(), app.config.ExecTimeout)
 	} else {
@@ -133,7 +137,7 @@ func (app *App) HandleKernelPanic(mention string) {
 	app.err = fmt.Errorf("kernel panic: %s", mention)
 }
 
-func (app *App) ExecuteError() error {
+func (app *App) Error() error {
 	return app.err
 }
 
