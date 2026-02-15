@@ -170,30 +170,31 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	}
 
 	var initFile string
-	if !info.IsDir() {
-		initFile = filepath.Base(cfg.RootFSPath)
-	}
+	/*
+		if !info.IsDir() {
+			initFile = filepath.Base(cfg.RootFSPath)
+		}
 
-	/*	if info.IsDir() {
-		entries, err := os.ReadDir(cfg.RootFSPath)
-		if err != nil {
-			return nil, fmt.Errorf("can't read rootfs directory: %w", err)
-		}
-		var fileEntry []os.DirEntry
-		for _, entry := range entries {
-			if !entry.Type().IsRegular() {
-				continue
+			if info.IsDir() {
+			entries, err := os.ReadDir(cfg.RootFSPath)
+			if err != nil {
+				return nil, fmt.Errorf("can't read rootfs directory: %w", err)
 			}
-			info, _ := entry.Info()
-			if info != nil && info.Size() == 0 {
-				continue
+			var fileEntry []os.DirEntry
+			for _, entry := range entries {
+				if !entry.Type().IsRegular() {
+					continue
+				}
+				info, _ := entry.Info()
+				if info != nil && info.Size() == 0 {
+					continue
+				}
+				fileEntry = append(fileEntry, entry)
 			}
-			fileEntry = append(fileEntry, entry)
-		}
-		if len(fileEntry) == 1 && fileEntry[0].Name() != "init" {
-			initFile = filepath.Base(fileEntry[0].Name())
-		}
-	}*/
+			if len(fileEntry) == 1 && fileEntry[0].Name() != "init" {
+				initFile = filepath.Base(fileEntry[0].Name())
+			}
+		}*/
 
 	if !hasFieldPrefix(kernelArgs, "rdinit=") && !hasFieldPrefix(kernelArgs, "init=") {
 		if len(cfg.InitCmdArgs) > 0 || len(initFile) > 0 {
