@@ -3,7 +3,7 @@
 **nanemu** — минималистичная обертка для упрощения запуска на ядре Linux ELF-бинарников в QEMU.
 
 Проект предназначен для:
-- ⚙️ Запуск кода на ядре Linux с минимальной настройкой (2 обязательных агрумента - путь к папке с бинарями и ядру Linux)
+- ⚙️ Запуск кода на ядре Linux с минимальной настройкой (нужен только путь к папке с бинарями)
 - 🔬 Тестирования кода использующего низкоуровневые механизмы ОС, такие как eBPF, системные вызовы и т.п.
 - 🧪 Отладки поведения кода, поведение которого зависит от архитектуры и версии ядра Linux
 
@@ -23,17 +23,17 @@ sudo apt install qemu-system qemu-user-static
 
 Официальная документация: [QEMU installation guide](https://www.qemu.org/download/)
 
-2. **Скачайте ядро Linux**
-
-Например, для Alpine ARM64:
-
-[https://dl-cdn.alpinelinux.org/alpine/edge/releases/](https://dl-cdn.alpinelinux.org/alpine/edge/releases/)
-
-3. **Установите `nanemu`**
+2. **Установите `nanemu`**
 
 ```bash
 GOBIN=$GOPATH/bin go install github.com/ebirukov/nanemu/cmd/nanemu@latest
 ```
+
+3. **Скачайте ядро Linux (Опционально)**
+
+Например, для Alpine ARM64:
+
+[https://dl-cdn.alpinelinux.org/alpine/edge/releases/](https://dl-cdn.alpinelinux.org/alpine/edge/releases/)
 
 ---
 
@@ -42,11 +42,11 @@ GOBIN=$GOPATH/bin go install github.com/ebirukov/nanemu/cmd/nanemu@latest
 🔧 **Запуск одиночного файла init:**default
 
 ```bash
-nanemu -kernel kernel/arm64/linux-5.10.0-32 -rootfs init
+nanemu rootfs/init
 ```
 
 ```bash
-nanemu -kernel kernel/arm64/linux-5.10.0-32-arm64 -rootfs init -arch arm64
+nanemu -kernel kernel/arm64/linux-5.10.0-32-arm64 -arch arm64 rootfs/ init
 ```
 
 🖥 **Запуск с кастомными параметрами:**
@@ -56,9 +56,9 @@ QEMU_BIN=/usr/bin/qemu-system-amd64 \
 KERNEL_ARGS="initrd=/mybin cma=0 audit=0 nowatchdog nosmp maxcpus=1 ipv6.disable=1 net.ifnames=0 lsm= acpi=off ima_appraise=off" \
 nanemu \
   -kernel kernel/amd64/linux-6.1.0-35-amd64 \
-  -rootfs build/amd64/initramfs \
   -arch arm64
   -timeout 10s
+  build/amd64/initramfs
 ```
 
 ---
@@ -68,10 +68,10 @@ nanemu \
 | Флаг         | Тип        | Описание                                                                      |
 |--------------|------------|-------------------------------------------------------------------------------|
 | `-kernel`    | `string`   | Путь к образу ядра Linux (**обязательный**, либо ENV `KERNEL_PATH`)           |
-| `-rootfs`    | `string`   | Путь к `initramfs` (**обязательный**)                                         |
 | `-arch`      | `string`   | Целевая архитектура (**по умолчанию:** `GOARCH`)                              |
 | `-timeout`   | `duration` | Максимальное время выполнения QEMU (**по умолчанию:** `30m`)                  |
 | `-loglevel`  | `string`   | Уровень логирования при загрузке ядра (**по умолчанию:** `3`)                 |
+| `-initrd`    | `string`   | Создать образ диска начальной файловой системы `initramfs` (в формате `cpio`) |
 | `-memory`    | `string`   | Размер памяти выделяемой QEMU                                                 |
 | `-smp`       | `string`   | Кол-во ядер процессора выделямых QEMU                                         |
 ---
@@ -89,7 +89,7 @@ nanemu \
 ## Особенности
 
 * 🚀 Субсекундный запуск при использовании аппаратной поддержки виртуализации и минимальных ядрах
-* 🏗 Автоматически создаёт временный `initramfs` в формате `cpio`, если не указан
+* 🏗 Автоматически создаёт временный образ диска с фалйовой системой `ext4` (при наличии модуля ядра VIRTIO_BLK), либо `initramfs` (в формате `cpio`)
 * 🧼 Автоматическая очистка временных файлов после завершения
 * 🛠 Поддержка архитектур `amd64` и `arm64`
 
@@ -124,24 +124,25 @@ func main() {
 2. Скомпилируем под нужную архитектуру:
 
 ```bash
-GOARCH=arm64 go build -o build/hello-arm64 ./cmd/hello
+GOOS=linux GOARCH=arm64 go build -o build/hello-arm64 ./cmd/hello
 ```
 
 3. Запускаем с помощью `nanemu`:
 
 ```bash
-KERNEL_ARGS='rdinit=/hello-arm64 console=ttyAMA0 loglevel=6'
 
 nanemu \
   -kernel kernel/vmlinuz-5.4.43-1-arm64 \
-  -rootfs build/hello-arm64 \
   -arch arm64
+  -loglevel 6
+  -initrd
+  build/hello-arm64
 ```
 
 4. Пример вывода:
 
 ```
-2025/08/23 12:49:47 executing: /usr/bin/qemu-system-arm64 -nodefaults -serial mon:stdio -machine virt -cpu cortex-a53 -nographic -no-reboot -append rdinit=/hello-arm64 console=ttyAMA0 loglevel=6 -kernel kernel/vmlinuz-5.4.43-1-arm64 -initrd ./initramfs.cpio718173793
+2025/08/23 12:49:47 executing: /usr/bin/qemu-system-arm64 -serial mon:stdio -machine virt -cpu cortex-a53 -nographic -no-reboot -append rdinit=/hello-arm64 console=ttyAMA0 loglevel=6 -kernel kernel/vmlinuz-5.4.43-1-arm64 -initrd ./initramfs.cpio718173793
 2025/08/23 12:49:47 process /usr/bin/qemu-system-arm64 started with pid: 2177874
 [    0.000000] Linux version 5.4.43-1-lts (buildozer@build-edge-aarch64) (gcc version 9.3.0 (Alpine 9.3.0)) #2-Alpine SMP Thu, 28 May 2020 20:13:48 UTC
 [    0.000000] Kernel command line: rdinit=/hello-arm64 console=ttyAMA0 loglevel=6
