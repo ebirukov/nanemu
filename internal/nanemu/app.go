@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ebirukov/nanemu/internal/initrd"
+	"github.com/ebirukov/nanemu/internal/diskimg"
 	"github.com/ebirukov/nanemu/internal/resource"
 	"github.com/ebirukov/nanemu/internal/text"
 	"golang.org/x/term"
 	"io"
 	"log"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -59,14 +58,7 @@ func (app *App) Init() (err error) {
 	r := resource.DefaultFetcher
 	r.AddFetcher("oci", resource.NewOCIResolver(app.config.Arch))
 	r.AddFetcher("https", resource.NewHTTPFetcher(app.config.Arch))
-	r.AddFetcher("docker", resource.FetcherFn(func(url *url.URL) (string, error) {
-		s := strings.Split(url.Path[1:], "/")
-		if len(s) == 1 {
-			url.Path = url.Path[:1] + "library/" + url.Path[1:]
-		}
-
-		return resource.NewOCIResolver(app.config.Arch).ByURI(url)
-	}))
+	r.AddFetcher("docker", resource.NewDockerResolver(app.config.Arch))
 
 	_, err = os.Stat(app.config.RootFSPath)
 	if err != nil {
@@ -76,18 +68,25 @@ func (app *App) Init() (err error) {
 		}
 	}
 
-	initrdFile, err := initrd.CreateImage("initramfs.cpio", app.config.RootFSPath, defaultPermBitsMask[runtime.GOOS])
-	if err != nil {
-		return fmt.Errorf("could not create initrd: %w", err)
+	if app.config.InitRD {
+		app.config.rootFSFile, err = diskimg.CreateInitRDImage(app.config.RootFSPath)
+		if err != nil {
+			return fmt.Errorf("could not create initrd: %w", err)
+		}
+	} else {
+		app.config.rootFSFile, err = diskimg.CreateHardDiskImage(app.config.RootFSPath)
+		if err != nil {
+			return fmt.Errorf("could not create initrd: %w", err)
+		}
 	}
 
-	defer initrdFile.Close()
+	defer app.config.rootFSFile.Close()
 
-	app.config.initrdFile = initrdFile
-
-	app.onShutdown = append(app.onShutdown, func(app *App) error {
-		return initrdFile.Remove()
-	})
+	if !app.config.KeepDiskImageOnExit {
+		app.onShutdown = append(app.onShutdown, func(app *App) error {
+			return app.config.rootFSFile.Remove()
+		})
+	}
 
 	if app.qemuArgs, err = app.config.BuildCmdArgs(); err != nil {
 		return fmt.Errorf("can't build command args: %w", err)
@@ -116,9 +115,7 @@ func (app *App) Init() (err error) {
 		fmt.Fprintf(os.Stderr, "\033[31mperhaps kernel image %s compile for %s; qemu expected arch: %s; use -arch opt\n\033[0m", filepath.Base(kernelPath), kernelArch, app.config.Arch)
 	}
 
-	app.qemuArgs = append(app.qemuArgs,
-		"-kernel", kernelPath,
-		"-initrd", initrdFile.Path())
+	app.qemuArgs = append(app.qemuArgs, "-kernel", kernelPath)
 
 	return nil
 }

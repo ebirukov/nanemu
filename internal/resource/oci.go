@@ -48,6 +48,23 @@ func parseImage(uri *url.URL) *Image {
 	return &image
 }
 
+type DockerResolver struct {
+	ociResolver *OCIRegistryResolver
+}
+
+func NewDockerResolver(arch string) *DockerResolver {
+	return &DockerResolver{NewOCIResolver(arch)}
+}
+
+func (r *DockerResolver) ByURI(uri *url.URL) (string, error) {
+	s := strings.Split(uri.Path[1:], "/")
+	if len(s) == 1 {
+		uri.Path = uri.Path[:1] + "library/" + uri.Path[1:]
+	}
+
+	return r.ociResolver.ByURI(uri)
+}
+
 type OCIRegistryResolver struct {
 	arch string
 }

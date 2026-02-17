@@ -21,9 +21,4 @@ var (
 		"amd64": "qemu-system-x86_64",
 		"arm64": "qemu-system-aarch64",
 	}
-	defaultPermBitsMask = map[string]int{
-		"windows": 0o110,
-		"linux":   0o000,
-		"darwin":  0o000,
-	}
 )

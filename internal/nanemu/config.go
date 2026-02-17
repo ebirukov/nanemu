@@ -10,31 +10,33 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ebirukov/nanemu/internal/initrd"
+	"github.com/ebirukov/nanemu/internal/diskimg"
 )
 
 type Config struct {
-	Version        bool
-	Arch           string
-	QemuBin        string
-	QemuCfgArgs    string
-	QemuExtCfgArgs *ExtArgs
-	KernelArgs     string
-	KernelURI      string
-	RootFSPath     string
-	InitCmdArgs    []string
-	ExecTimeout    time.Duration
-	FailOnPanic    bool
-	Loglevel       string
-	Serial         string
-	Terminal       bool
-	Interactive    bool
-	Env            Environment
+	Version             bool
+	Arch                string
+	QemuBin             string
+	QemuCfgArgs         string
+	QemuExtCfgArgs      *ExtArgs
+	KernelArgs          string
+	KernelURI           string
+	RootFSPath          string
+	InitRD              bool
+	InitCmdArgs         []string
+	ExecTimeout         time.Duration
+	FailOnPanic         bool
+	Loglevel            string
+	Serial              string
+	Terminal            bool
+	Interactive         bool
+	Env                 Environment
+	KeepDiskImageOnExit bool
 
 	Memory string
 	Smp    string
 
-	initrdFile *initrd.ImageFile
+	rootFSFile *diskimg.ImageFile
 	localDir   string
 }
 
@@ -63,6 +65,8 @@ func (cfg *Config) Parse(args []string) error {
 	opts.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
 	opts.StringVar(&cfg.KernelURI, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image (default $KERNEL_PATH)")
 	opts.StringVar(&cfg.RootFSPath, "rootfs", "", "Deprecated. Path to initramfs root directory")
+	opts.BoolVar(&cfg.InitRD, "initrd", false, "Create initramfs image and use as kernel rootfs")
+	opts.BoolVar(&cfg.KeepDiskImageOnExit, "keep-disk", false, "keep disk image file on exit")
 	opts.BoolVar(&cfg.FailOnPanic, "fail-on-panic", true, "Fail on kernel panic")
 	opts.DurationVar(&cfg.ExecTimeout, "timeout", 0, "Max time of qemu execution")
 	opts.StringVar(&cfg.Memory, "memory", "", "Memory limit")
@@ -177,54 +181,44 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 
 	kernelArgs = append(kernelArgs, cfg.Env...)
 	if !hasFieldPrefix(kernelArgs, "PATH=") {
-		kernelArgs = append(kernelArgs, "PATH=/")
+		kernelArgs = append(kernelArgs, "PATH=/:/bin")
 	}
 
-	var initFile string
+	var initCmd string
 
-	/*
+	info, err := os.Stat(cfg.RootFSPath)
+	if err != nil {
+		return nil, fmt.Errorf("can't stat rootfs path: %w", err)
+	}
 
-		info, err := os.Stat(cfg.RootFSPath)
-		if err != nil {
-			return nil, fmt.Errorf("can't stat rootfs path: %w", err)
+	if !info.IsDir() {
+		initCmd = filepath.Base(cfg.RootFSPath)
+	}
+
+	if !hasFieldPrefix(kernelArgs, "init=") &&
+		(len(cfg.InitCmdArgs) > 0 || len(initCmd) > 0) {
+		initCmd = strings.TrimSpace(fmt.Sprintf("%s %s", initCmd, strings.Join(cfg.InitCmdArgs, " ")))
+		if cfg.InitRD {
+			kernelArgs = append(kernelArgs, "rdinit="+initCmd)
+		} else {
+			kernelArgs = append(kernelArgs, "init="+initCmd)
 		}
+	}
 
-			if !info.IsDir() {
-			initFile = filepath.Base(cfg.RootFSPath)
-		}
-
-			if info.IsDir() {
-			entries, err := os.ReadDir(cfg.RootFSPath)
-			if err != nil {
-				return nil, fmt.Errorf("can't read rootfs directory: %w", err)
-			}
-			var fileEntry []os.DirEntry
-			for _, entry := range entries {
-				if !entry.Type().IsRegular() {
-					continue
-				}
-				info, _ := entry.Info()
-				if info != nil && info.Size() == 0 {
-					continue
-				}
-				fileEntry = append(fileEntry, entry)
-			}
-			if len(fileEntry) == 1 && fileEntry[0].Name() != "init" {
-				initFile = filepath.Base(fileEntry[0].Name())
-			}
-		}*/
-
-	if !hasFieldPrefix(kernelArgs, "rdinit=") && !hasFieldPrefix(kernelArgs, "init=") {
-		if len(cfg.InitCmdArgs) > 0 || len(initFile) > 0 {
-			rdinit := fmt.Sprintf("%s %s", initFile, strings.Join(cfg.InitCmdArgs, " "))
-			kernelArgs = append(kernelArgs, "rdinit="+strings.TrimSpace(rdinit))
-		}
+	if !hasFieldPrefix(kernelArgs, "root=") && !cfg.InitRD {
+		kernelArgs = append(kernelArgs, "root=/dev/vda rw")
 	}
 
 	vmArgs := append(cfg.QemuExtCfgArgs.Args(), strings.Fields(cfg.QemuCfgArgs)...)
 
-	if cfg.Memory == "" && cfg.initrdFile.Size() > DefaultQemuMemoryBytes {
-		memoryKb := int(cfg.initrdFile.Size()+MinQemuMemoryBytes) / 1024 / 1024
+	if cfg.InitRD {
+		vmArgs = append(vmArgs, "-initrd", cfg.rootFSFile.Path())
+	} else {
+		vmArgs = append(vmArgs, "-drive", fmt.Sprintf("file=%s,format=raw,if=virtio", cfg.rootFSFile.Path()))
+	}
+
+	if cfg.InitRD && cfg.Memory == "" && cfg.rootFSFile.Size() > DefaultQemuMemoryBytes {
+		memoryKb := int(cfg.rootFSFile.Size()+MinQemuMemoryBytes) / 1024 / 1024
 		cfg.Memory = strconv.Itoa(memoryKb+1) + "M"
 	}
 
