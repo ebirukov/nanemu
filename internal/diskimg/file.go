@@ -34,7 +34,7 @@ func CreateHardDiskImage(rootFSPath string) (*ImageFile, error) {
 
 		defer img.Close()
 
-		if imageFile.size, err = ext4.CopyFrom(rootFSPath, img); err != nil {
+		if imageFile.size, err = ext4.CopyFrom(rootFSPath, img, defaultPermBitsMask[runtime.GOOS]); err != nil {
 			return nil, fmt.Errorf("can't copy files to hard disk image from %s: %w", rootFSPath, err)
 		}
 	}

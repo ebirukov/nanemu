@@ -125,7 +125,7 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 	}
 
 	if info.Mode().IsRegular() && execPermBits > 0 {
-		isExec, err := isExecutableFile(path)
+		isExec, err := IsExecutableFile(path)
 		if err != nil {
 			return err
 		}
@@ -166,7 +166,7 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 	return nil
 }
 
-func isExecutableFile(path string) (bool, error) {
+func IsExecutableFile(path string) (bool, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return false, nil
@@ -195,7 +195,6 @@ func isExecutableFile(path string) (bool, error) {
 	case bytes.Equal(header[:2], []byte{'#', '!'}):
 		return true, nil
 	default:
-		fmt.Printf("non exec file; header: %s", header)
 	}
 
 	return false, nil

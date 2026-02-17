@@ -3,6 +3,7 @@ package ext4
 import (
 	"errors"
 	"fmt"
+	"github.com/ebirukov/nanemu/pkg/cpio"
 	"io/fs"
 	"os"
 	"path"
@@ -27,7 +28,7 @@ func CreateDiskImage(path string, sizeMB int) (*ext4fs.Image, error) {
 	return img, nil
 }
 
-func CopyFrom(srcDir string, img *ext4fs.Image) (total int64, err error) {
+func CopyFrom(srcDir string, img *ext4fs.Image, execPermBits int) (total int64, err error) {
 	// храним inode созданных директорий
 	inodes := map[string]uint32{
 		"/": ext4fs.RootInode,
@@ -86,7 +87,16 @@ func CopyFrom(srcDir string, img *ext4fs.Image) (total int64, err error) {
 			if err != nil {
 				return err
 			}
-		case info.Mode().IsRegular(): // ← обычный файл
+		case info.Mode().IsRegular():
+			if execPermBits > 0 {
+				if isExec, _ := cpio.IsExecutableFile(hostPath); isExec {
+					fmt.Printf("file %s permision mode flags %v", info.Name(), info.Mode())
+					execMode := info.Mode() | fs.FileMode(execPermBits)
+					fmt.Printf(" was modified to %v\n", execMode)
+					mode = uint16(execMode.Perm())
+				}
+			}
+
 			data, err := os.ReadFile(hostPath)
 			if err != nil {
 				return err
