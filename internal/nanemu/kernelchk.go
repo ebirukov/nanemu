@@ -1,8 +1,12 @@
 package nanemu
 
 import (
+	"bufio"
 	"bytes"
-	"encoding/binary"
+	"compress/gzip"
+	"debug/elf"
+	"debug/pe"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,22 +22,47 @@ func checkKernelArch(path string) (string, error) {
 	}
 	defer file.Close()
 
+	rd := bufio.NewReader(file)
+	if isGzip(file) {
+		gzr, _ := gzip.NewReader(file)
+		defer gzr.Close()
+
+		rd = bufio.NewReader(gzr)
+	}
+
+	b, err := io.ReadAll(io.LimitReader(rd, 128*1024))
+	if err != nil {
+		return "", fmt.Errorf("can't read kernel archive from %s: %w", path, err)
+	}
+
+	r := bytes.NewReader(b)
+
 	buf := make([]byte, 512)
-	n, err := file.Read(buf)
+	n, err := r.Read(buf)
 	if err != nil && err != io.EOF {
 		return "", nil
 	}
 	data := buf[:n]
 
 	filename := strings.ToLower(filepath.Base(path))
-
-	// Проверка форматов в порядке приоритета
-	if arch := checkPECOFFArchitecture(data); arch != "" {
-		return arch, nil
+	elfFile, err := elf.NewFile(r)
+	if err == nil {
+		switch elfFile.FileHeader.Machine {
+		case elf.EM_X86_64:
+			return "amd64", nil
+		case elf.EM_AARCH64:
+			return "arm64", nil
+		}
 	}
 
-	if arch := checkELFArchitecture(data); arch != "" {
-		return arch, nil
+	peFile, err := pe.NewFile(r)
+	if err == nil {
+		switch peFile.FileHeader.Machine {
+		case pe.IMAGE_FILE_MACHINE_AMD64:
+			return "amd64", nil
+		case pe.IMAGE_FILE_MACHINE_ARM64:
+			return "arm64", nil
+		}
 	}
 
 	if isBzImage(data) {
@@ -52,75 +81,6 @@ func checkKernelArch(path string) (string, error) {
 	return "", nil
 }
 
-// checkPECOFFArchitecture проверяет PE/COFF и возвращает архитектуру
-func checkPECOFFArchitecture(data []byte) string {
-	if !isValidPECOFF(data) {
-		return ""
-	}
-
-	peOffset := binary.LittleEndian.Uint32(data[0x3C:0x40])
-	machine := binary.LittleEndian.Uint16(data[peOffset+4 : peOffset+6])
-
-	switch machine {
-	case 0xAA64:
-		return "arm64"
-	case 0x8664:
-		return "amd64"
-	default:
-		return ""
-	}
-}
-
-// isValidPECOFF проверяет валидность PE/COFF заголовка
-func isValidPECOFF(data []byte) bool {
-	if len(data) < 64 {
-		return false
-	}
-
-	// Проверка DOS заголовка
-	if data[0] != 'M' || data[1] != 'Z' {
-		return false
-	}
-
-	// Получение смещения PE заголовка
-	peOffset := binary.LittleEndian.Uint32(data[0x3C:0x40])
-	if int(peOffset)+4 >= len(data) {
-		return false
-	}
-
-	// Проверка PE сигнатуры
-	return bytes.Equal(data[peOffset:peOffset+4], []byte("PE\x00\x00"))
-}
-
-// checkELFArchitecture проверяет ELF и возвращает архитектуру
-func checkELFArchitecture(data []byte) string {
-	if !isValidELF(data) {
-		return ""
-	}
-
-	switch binary.LittleEndian.Uint16(data[18:20]) {
-	case 0xB7:
-		return "arm64"
-	case 0x3E:
-		return "amd64"
-	default:
-		return ""
-	}
-}
-
-// isValidELF проверяет валидность ELF заголовка
-func isValidELF(data []byte) bool {
-	if len(data) < 20 {
-		return false
-	}
-
-	// Проверка ELF магической сигнатуры
-	return data[0] == 0x7F &&
-		data[1] == 'E' &&
-		data[2] == 'L' &&
-		data[3] == 'F'
-}
-
 // isBzImage проверяет bzImage формат
 func isBzImage(data []byte) bool {
 	const minBzImageSize = 0x204
@@ -131,4 +91,14 @@ func isBzImage(data []byte) bool {
 	// Сигнатура setup header bzImage
 	const setupSigOffset = 0x202
 	return data[setupSigOffset] == 0x03 && data[setupSigOffset+1] == 0x00
+}
+
+// isGzip проверяет, является ли файл gzip-архивом
+func isGzip(f *os.File) bool {
+	buf := make([]byte, 2)
+	_, err := f.ReadAt(buf, 0)
+	if err != nil {
+		return false
+	}
+	return buf[0] == 0x1F && buf[1] == 0x8B
 }

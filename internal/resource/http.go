@@ -10,38 +10,38 @@ import (
 	"path/filepath"
 )
 
-type HTTPFetcher struct {
-	arch string
-}
+func DownloadURL(uri *url.URL) (string, error) {
+	downloadPath := filepath.Join(fs.CfgDir(), "download", uri.Host, filepath.Dir(uri.Path))
+	os.MkdirAll(downloadPath, 0755)
 
-func NewHTTPFetcher(arch string) *HTTPFetcher {
-	return &HTTPFetcher{
-		arch: arch,
+	fName := filepath.Join(downloadPath, filepath.Base(uri.Path))
+
+	if _, err := os.Stat(fName); err != nil {
+		if os.IsNotExist(err) {
+			fw, err := os.OpenFile(fName, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0755)
+			if err != nil {
+				return "", fmt.Errorf("can't create file %s: %w", fName, err)
+			}
+
+			defer fw.Close()
+
+			fmt.Printf("downloading from %s to %s\n", uri.String(), downloadPath)
+			if err := download(uri.String(), func(r io.Reader) error {
+				_, err := io.Copy(fw, r)
+
+				return err
+			}); err != nil {
+				return "", fmt.Errorf("can't download %s: %w", uri, err)
+			}
+
+			return downloadPath, err
+		}
+		if err != nil {
+			return "", fmt.Errorf("can't stat %s: %w", fName, err)
+		}
 	}
-}
 
-func (r *HTTPFetcher) ByURI(uri *url.URL) (string, error) {
-	downloadPath := filepath.Join(fs.CfgDir(), "kernel", r.arch)
-	os.Mkdir(downloadPath, 0755)
-
-	fName := filepath.Join(downloadPath, "vmlinuz")
-
-	fw, err := os.OpenFile(fName, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0755)
-	if err != nil {
-		return "", fmt.Errorf("can't create file %s: %w", fName, err)
-	}
-
-	defer fw.Close()
-
-	if err := download(uri.String(), func(r io.Reader) error {
-		_, err := io.Copy(fw, r)
-
-		return err
-	}); err != nil {
-		return "", fmt.Errorf("can't download %s: %w", uri, err)
-	}
-
-	return fName, nil
+	return downloadPath, nil
 }
 
 func download(url string, fetch func(io.Reader) error) error {

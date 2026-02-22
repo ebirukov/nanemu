@@ -132,23 +132,23 @@ GOOS=linux GOARCH=arm64 go build -o build/hello-arm64 ./cmd/hello
 ```bash
 
 nanemu \
-  -kernel kernel/vmlinuz-5.4.43-1-arm64 \
-  -arch arm64
-  -loglevel 6
-  -initrd
-  build/hello-arm64
+  -kernel https://dl-cdn.alpinelinux.org/alpine/edge/releases/aarch64/netboot/vmlinuz-virt \
+  -arch arm64 \
+  -loglevel 6 \
+  -initrd \
+  example/build/hello-arm64
 ```
 
 4. Пример вывода:
 
 ```
-2025/08/23 12:49:47 executing: /usr/bin/qemu-system-arm64 -serial mon:stdio -machine virt -cpu cortex-a53 -nographic -no-reboot -append rdinit=/hello-arm64 console=ttyAMA0 loglevel=6 -kernel kernel/vmlinuz-5.4.43-1-arm64 -initrd ./initramfs.cpio718173793
-2025/08/23 12:49:47 process /usr/bin/qemu-system-arm64 started with pid: 2177874
-[    0.000000] Linux version 5.4.43-1-lts (buildozer@build-edge-aarch64) (gcc version 9.3.0 (Alpine 9.3.0)) #2-Alpine SMP Thu, 28 May 2020 20:13:48 UTC
+2026/01/26 12:49:47 executing: /usr/bin/qemu-system-arm64 -serial mon:stdio -machine virt -cpu cortex-a53 -nographic -no-reboot -append rdinit=/hello-arm64 console=ttyAMA0 loglevel=6 -kernel kernel/vmlinuz-5.4.43-1-arm64 -initrd ./initramfs.cpio718173793
+2026/01/26 12:49:47 process /usr/bin/qemu-system-arm64 started with pid: 2177874
+[    0.000000] Linux version 6.18.7-0-virt (buildozer@build-edge-aarch64) (cc (Alpine 15.2.0) 15.2.0, GNU ld (GNU Binutils) 2.45.1) #1-Alpine SMP PREEMPT_DYNAMIC 2026-01-26 12:49:47
 [    0.000000] Kernel command line: rdinit=/hello-arm64 console=ttyAMA0 loglevel=6
-Hello from process 1 on linux kernel version: 5.4.43-1-lts
+Hello from process 1 on linux kernel version: 6.18.7-0-virt
 [    0.558718] reboot: Power down
-2025/08/23 12:49:48 process 2177874 complete with code 0
+2026/02/22 14:15:02 exit with code: 0
 ```
 
 

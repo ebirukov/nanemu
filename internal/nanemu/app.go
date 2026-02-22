@@ -57,11 +57,32 @@ func (app *App) Init() (err error) {
 
 	r := resource.DefaultFetcher
 	r.AddFetcher("oci", resource.NewOCIResolver(app.config.Arch))
-	r.AddFetcher("https", resource.NewHTTPFetcher(app.config.Arch))
 	r.AddFetcher("docker", resource.NewDockerResolver(app.config.Arch))
 
-	_, err = os.Stat(app.config.RootFSPath)
+	kernelPath, err := r.FetchPath(app.config.KernelURI)
 	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("can't resolve kernel path: %w", err)
+		}
+
+		fmt.Fprintf(os.Stderr, "\u001B[31mcan't get kernel from uri: %s\n\u001B[0m", err)
+	}
+
+	if kernelPath == "" {
+		return fmt.Errorf("kernel path not specified. set env KERNEL_PATH or use option -kernel")
+	}
+
+	kernelPath, err = r.FetchPath(kernelPath)
+	if err != nil {
+		return fmt.Errorf("can't resolve kernel path '%s': %w", kernelPath, err)
+	}
+
+	kernelArch, err := checkKernelArch(kernelPath)
+	if kernelArch != "" && kernelArch != app.config.Arch {
+		return fmt.Errorf("kernel image %s compile for %s; qemu expected arch: %s; use -arch opt", filepath.Base(kernelPath), kernelArch, app.config.Arch)
+	}
+
+	if _, err = os.Stat(app.config.RootFSPath); err != nil {
 		app.config.RootFSPath, err = r.FetchPath(app.config.RootFSPath)
 		if err != nil {
 			return fmt.Errorf("can't resolve rootfs path: %w", err)
@@ -90,29 +111,6 @@ func (app *App) Init() (err error) {
 
 	if app.qemuArgs, err = app.config.BuildCmdArgs(); err != nil {
 		return fmt.Errorf("can't build command args: %w", err)
-	}
-
-	kernelPath, err := r.FetchPath(app.config.KernelURI)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("can't resolve kernel path: %w", err)
-		}
-
-		fmt.Fprintf(os.Stderr, "\u001B[31mcan't get kernel from uri: %s\n\u001B[0m", err)
-	}
-
-	if kernelPath == "" {
-		return fmt.Errorf("kernel path not specified. set env KERNEL_PATH or use option -kernel")
-	}
-
-	kernelPath, err = r.FetchPath(kernelPath)
-	if err != nil {
-		return fmt.Errorf("can't resolve kernel path '%s': %w", kernelPath, err)
-	}
-
-	kernelArch, _ := checkKernelArch(kernelPath)
-	if kernelArch != "" && kernelArch != app.config.Arch {
-		fmt.Fprintf(os.Stderr, "\033[31mperhaps kernel image %s compile for %s; qemu expected arch: %s; use -arch opt\n\033[0m", filepath.Base(kernelPath), kernelArch, app.config.Arch)
 	}
 
 	app.qemuArgs = append(app.qemuArgs, "-kernel", kernelPath)

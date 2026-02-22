@@ -23,7 +23,8 @@ func (r BySchemaFetchers) AddFetcher(schema string, fetcher Fetcher) {
 }
 
 var DefaultFetcher = BySchemaFetchers{
-	"file": FetcherFn(FetchFilePath),
+	"file":  FetcherFn(FetchFilePath),
+	"https": FetcherFn(DownloadURL),
 }
 
 func (r BySchemaFetchers) FetchPath(uri string) (string, error) {
