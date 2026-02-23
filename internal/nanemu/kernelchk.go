@@ -6,14 +6,45 @@ import (
 	"compress/gzip"
 	"debug/elf"
 	"debug/pe"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
-const x86 = "x86_64"
+var ErrUnsupportedKernel = errors.New("unsupported kernel format")
+
+func findKernel(path string) (string, string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", "", fmt.Errorf("can't stat kernel path %s: %w", path, err)
+	}
+
+	if info.Mode().IsRegular() {
+		arch, err := checkKernelArch(path)
+		if err != nil {
+			return "", "", err
+		}
+
+		return path, arch, nil
+	}
+
+	files, err := os.ReadDir(path)
+	if err != nil {
+		return "", "", fmt.Errorf("can't read directory %s: %w", path, err)
+	}
+
+	for _, file := range files {
+		path = filepath.Join(path, file.Name())
+		arch, err := checkKernelArch(path)
+		if err == nil {
+			return path, arch, nil
+		}
+	}
+
+	return "", "", fmt.Errorf("can't find kernel on path %s: %w", path, os.ErrNotExist)
+}
 
 func checkKernelArch(path string) (string, error) {
 	file, err := os.Open(path)
@@ -24,7 +55,11 @@ func checkKernelArch(path string) (string, error) {
 
 	rd := bufio.NewReader(file)
 	if isGzip(file) {
-		gzr, _ := gzip.NewReader(file)
+		gzr, err := gzip.NewReader(file)
+		if err != nil {
+			return "", fmt.Errorf("can't open kernel archive %s: %w", path, err)
+		}
+
 		defer gzr.Close()
 
 		rd = bufio.NewReader(gzr)
@@ -40,18 +75,20 @@ func checkKernelArch(path string) (string, error) {
 	buf := make([]byte, 512)
 	n, err := r.Read(buf)
 	if err != nil && err != io.EOF {
-		return "", nil
+		return "", err
 	}
 	data := buf[:n]
-
-	filename := strings.ToLower(filepath.Base(path))
 	elfFile, err := elf.NewFile(r)
 	if err == nil {
-		switch elfFile.FileHeader.Machine {
-		case elf.EM_X86_64:
-			return "amd64", nil
-		case elf.EM_AARCH64:
-			return "arm64", nil
+		for _, sec := range elfFile.Sections {
+			if sec.Name == ".note.Linux" {
+				switch elfFile.FileHeader.Machine {
+				case elf.EM_X86_64:
+					return "amd64", nil
+				case elf.EM_AARCH64:
+					return "arm64", nil
+				}
+			}
 		}
 	}
 
@@ -69,16 +106,7 @@ func checkKernelArch(path string) (string, error) {
 		return "amd64", nil
 	}
 
-	switch {
-	case strings.Contains(filename, "arm64"),
-		strings.Contains(filename, "aarch64"):
-		return "arm64", nil
-	case strings.Contains(filename, "amd64"),
-		strings.Contains(filename, x86):
-		return "amd64", nil
-	}
-
-	return "", nil
+	return "", ErrUnsupportedKernel
 }
 
 // isBzImage проверяет bzImage формат

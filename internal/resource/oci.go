@@ -56,7 +56,7 @@ func NewDockerResolver(arch string) *DockerResolver {
 	return &DockerResolver{NewOCIResolver(arch)}
 }
 
-func (r *DockerResolver) ByURI(uri *url.URL) (string, error) {
+func (r *DockerResolver) ByURI(uri *url.URL) (Bundle, error) {
 	s := strings.Split(uri.Path[1:], "/")
 	if len(s) == 1 {
 		uri.Path = uri.Path[:1] + "library/" + uri.Path[1:]
@@ -75,25 +75,30 @@ func NewOCIResolver(arch string) *OCIRegistryResolver {
 	}
 }
 
-func (r *OCIRegistryResolver) ByURI(uri *url.URL) (string, error) {
+func (r *OCIRegistryResolver) ByURI(uri *url.URL) (Bundle, error) {
 	image := parseImage(uri)
 	downloadPath := filepath.Join(fs.CfgDir(), "docker-image", image.Repo, image.Tag, r.arch)
+	bundle := Bundle{
+		Type:         "oci",
+		ContentPath:  filepath.Join(downloadPath, "content"),
+		MetadataPath: filepath.Join(downloadPath, "meta"),
+	}
 	if _, err := os.Stat(downloadPath); err != nil {
 		if os.IsNotExist(err) {
-			fmt.Println("downloading docker image:", image.String())
+			fmt.Printf("downloading docker image %s to %s\n", image.String(), downloadPath)
 			if err := Download(image, r.arch, downloadPath); err != nil {
 				fmt.Printf("can't download image from %s: %s\n", uri, err)
 
-				return "", nil
+				return bundle, nil
 			}
 
-			return downloadPath, nil
+			return bundle, nil
 		}
 
-		return "", err
+		return bundle, err
 	}
 
-	return downloadPath, nil
+	return bundle, nil
 }
 
 func Download(image *Image, arch, path string) error {
@@ -105,9 +110,41 @@ func Download(image *Image, arch, path string) error {
 		return fmt.Errorf("can't get manifest: %v", err)
 	}
 
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("can't serialize manifest: %w", err)
+	}
+
+	metaPath := filepath.Join(path, "meta")
+	os.MkdirAll(metaPath, 0755)
+
+	if err := os.WriteFile(filepath.Join(metaPath, "manifest.json"), data, 0666); err != nil {
+		return fmt.Errorf("can't write manifest: %w", err)
+	}
+
+	fetchCfgFn := func(r io.Reader) error {
+		f, err := os.Create(filepath.Join(metaPath, "config.json"))
+		if err != nil {
+			return fmt.Errorf("can't create image config file: %w", err)
+		}
+
+		defer f.Close()
+
+		_, err = io.Copy(f, r)
+
+		return err
+	}
+
+	if err := repoCli.DownloadBlob(manifest.Config.Digest, fetchCfgFn); err != nil {
+		return fmt.Errorf("can't download image config: %w", err)
+	}
+
+	contentPath := filepath.Join(path, "content")
+	os.MkdirAll(contentPath, 0755)
+
 	for i, layerDesc := range manifest.Layers {
 		fetchFn := func(r io.Reader) error {
-			return storeBlob(r, layerDesc, path)
+			return storeBlob(r, layerDesc, contentPath)
 		}
 
 		if err := repoCli.DownloadBlob(layerDesc.Digest, fetchFn); err != nil {

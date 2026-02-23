@@ -6,38 +6,37 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ebirukov/nanemu/internal/diskimg"
 )
 
 type Config struct {
 	Version             bool
 	Arch                string
 	QemuBin             string
-	QemuCfgArgs         string
 	QemuExtCfgArgs      *ExtArgs
-	KernelArgs          string
 	KernelURI           string
 	RootFSPath          string
 	InitRD              bool
-	InitCmdArgs         []string
 	ExecTimeout         time.Duration
 	FailOnPanic         bool
-	Loglevel            string
 	Serial              string
 	Terminal            bool
 	Interactive         bool
-	Env                 Environment
 	KeepDiskImageOnExit bool
+
+	KernelBootParams KernelBootParams
 
 	Memory string
 	Smp    string
 
-	rootFSFile *diskimg.ImageFile
-	localDir   string
+	localDir string
+}
+
+type KernelBootParams struct {
+	Env         Environment
+	Loglevel    string
+	InitCmdArgs []string
 }
 
 type Environment []string
@@ -72,10 +71,10 @@ func (cfg *Config) Parse(args []string) error {
 	opts.StringVar(&cfg.Memory, "memory", "", "Memory limit")
 	opts.StringVar(&cfg.Smp, "smp", "", "Cpus limit")
 	opts.StringVar(&cfg.Serial, "s", "mon:stdio", "serial port to host device, standard io by default")
-	opts.StringVar(&cfg.Loglevel, "loglevel", "3", "kernel log level")
+	opts.StringVar(&cfg.KernelBootParams.Loglevel, "loglevel", "3", "kernel log level")
 	opts.BoolVar(&cfg.Terminal, "t", false, "create pseudo tty")
 	opts.BoolVar(&cfg.Interactive, "i", runtime.GOOS != "windows", "terminal interaction")
-	opts.Func("e", "set environment variables. format KEY=VALUE", cfg.Env.Set)
+	opts.Func("e", "set environment variables. format KEY=VALUE", cfg.KernelBootParams.Env.Set)
 
 	opts.Usage = func() {
 		fmt.Fprintf(opts.Output(), "Usage: \n nanemu [Options] -kernel /path/to/linux/kernel /path/to/rootfs \n")
@@ -130,33 +129,9 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	if len(opts.Args()) > 0 {
-		cfg.RootFSPath, cfg.InitCmdArgs = opts.Args()[0], opts.Args()[1:]
+		cfg.RootFSPath, cfg.KernelBootParams.InitCmdArgs = opts.Args()[0], opts.Args()[1:]
 	}
 
-	return nil
-}
-
-func hasFieldPrefix(fields []string, prefix string) bool {
-	for _, f := range fields {
-		if strings.Contains(f, prefix) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func hasField(fields []string, prefix string) bool {
-	for _, f := range fields {
-		if strings.EqualFold(f, prefix) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	defaultQemuBin := defaultQemuBin[cfg.Arch]
 	switch runtime.GOOS {
 	case "windows":
@@ -164,95 +139,6 @@ func (cfg *Config) BuildCmdArgs() ([]string, error) {
 	}
 
 	cfg.QemuBin = getEnv("QEMU_BIN", defaultQemuBin)
-	cfg.KernelArgs = getEnv(KernelArgs, defaultKernelArgs[cfg.Arch])
-	cfg.QemuCfgArgs = getEnv("QEMU_ARGS", defaultQemuArgs[cfg.Arch])
 
-	kernelArgs := strings.Fields(cfg.KernelArgs)
-	// add console UART for inspect kernel dmesg write to stdout
-	if cfg.FailOnPanic && !hasFieldPrefix(kernelArgs, "console=") {
-		kernelArgs = append(kernelArgs, defaultKernelArgs[cfg.Arch])
-	}
-
-	kernelArgs = append(kernelArgs, "panic=-1")
-
-	if cfg.Loglevel != "" && !hasFieldPrefix(kernelArgs, "loglevel=") && !hasField(kernelArgs, "quiet") {
-		kernelArgs = append(kernelArgs, "loglevel="+cfg.Loglevel)
-	}
-
-	kernelArgs = append(kernelArgs, cfg.Env...)
-	if !hasFieldPrefix(kernelArgs, "PATH=") {
-		kernelArgs = append(kernelArgs, "PATH=/:/bin")
-	}
-
-	var initCmd string
-
-	info, err := os.Stat(cfg.RootFSPath)
-	if err != nil {
-		return nil, fmt.Errorf("can't stat rootfs path: %w", err)
-	}
-
-	if !info.IsDir() {
-		initCmd = filepath.Base(cfg.RootFSPath)
-	}
-
-	if !hasFieldPrefix(kernelArgs, "init=") &&
-		(len(cfg.InitCmdArgs) > 0 || len(initCmd) > 0) {
-		initCmd = strings.TrimSpace(fmt.Sprintf("%s %s", initCmd, strings.Join(cfg.InitCmdArgs, " ")))
-		if cfg.InitRD {
-			kernelArgs = append(kernelArgs, "rdinit="+initCmd)
-		} else {
-			kernelArgs = append(kernelArgs, "init="+initCmd)
-		}
-	}
-
-	if !hasFieldPrefix(kernelArgs, "root=") && !cfg.InitRD {
-		kernelArgs = append(kernelArgs, "root=/dev/vda rw")
-	}
-
-	vmArgs := append(cfg.QemuExtCfgArgs.Args(), strings.Fields(cfg.QemuCfgArgs)...)
-
-	if cfg.InitRD {
-		vmArgs = append(vmArgs, "-initrd", cfg.rootFSFile.Path())
-	} else {
-		vmArgs = append(vmArgs, "-drive", fmt.Sprintf("file=%s,format=raw,if=virtio", cfg.rootFSFile.Path()))
-	}
-
-	if cfg.InitRD && cfg.Memory == "" && cfg.rootFSFile.Size() > DefaultQemuMemoryBytes {
-		memoryKb := int(cfg.rootFSFile.Size()+MinQemuMemoryBytes) / 1024 / 1024
-		cfg.Memory = strconv.Itoa(memoryKb+1) + "M"
-	}
-
-	if cfg.Memory != "" && !hasField(vmArgs, "-m") {
-		vmArgs = append(vmArgs, "-m", cfg.Memory)
-	}
-
-	if !hasField(vmArgs, "-serial") {
-		vmArgs = append(vmArgs, "-serial", cfg.Serial)
-	}
-
-	if cfg.Smp != "" && !hasField(vmArgs, "-smp") {
-		vmArgs = append(vmArgs, "-smp", cfg.Smp)
-	}
-
-	// accelerate hypervisor by default
-	if cfg.Arch == runtime.GOARCH {
-		switch runtime.GOOS {
-		case "darwin":
-			vmArgs = append(vmArgs, "-accel", "hvf")
-		case "linux":
-			vmArgs = append(vmArgs, "-enable-kvm")
-		}
-	}
-
-	vmArgs = append(vmArgs, "-append", strings.Join(kernelArgs, " "))
-
-	return vmArgs, nil
-}
-
-func getEnv(key, defaultVal string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-
-	return defaultVal
+	return nil
 }

@@ -48,18 +48,18 @@ func (app *App) ParseCfg(args []string) (cfg *Config, err error) {
 	return app.config, nil
 }
 
-func (app *App) Init() (err error) {
-	if app.config.ExecTimeout > 0 {
-		app.ctx, app.cancel = context.WithTimeout(context.Background(), app.config.ExecTimeout)
+func (app *App) Init(cfg *Config) (err error) {
+	if cfg.ExecTimeout > 0 {
+		app.ctx, app.cancel = context.WithTimeout(context.Background(), cfg.ExecTimeout)
 	} else {
 		app.ctx, app.cancel = context.WithCancel(context.Background())
 	}
 
 	r := resource.DefaultFetcher
-	r.AddFetcher("oci", resource.NewOCIResolver(app.config.Arch))
-	r.AddFetcher("docker", resource.NewDockerResolver(app.config.Arch))
+	r.AddFetcher("oci", resource.NewOCIResolver(cfg.Arch))
+	r.AddFetcher("docker", resource.NewDockerResolver(cfg.Arch))
 
-	kernelPath, err := r.FetchPath(app.config.KernelURI)
+	kernelBundle, err := r.FetchPath(cfg.KernelURI)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("can't resolve kernel path: %w", err)
@@ -68,52 +68,49 @@ func (app *App) Init() (err error) {
 		fmt.Fprintf(os.Stderr, "\u001B[31mcan't get kernel from uri: %s\n\u001B[0m", err)
 	}
 
-	if kernelPath == "" {
+	if kernelBundle.ContentPath == "" {
 		return fmt.Errorf("kernel path not specified. set env KERNEL_PATH or use option -kernel")
 	}
 
-	kernelPath, err = r.FetchPath(kernelPath)
+	kernelPath, kernelArch, err := findKernel(kernelBundle.ContentPath)
 	if err != nil {
-		return fmt.Errorf("can't resolve kernel path '%s': %w", kernelPath, err)
+		return err
 	}
 
-	kernelArch, err := checkKernelArch(kernelPath)
-	if kernelArch != "" && kernelArch != app.config.Arch {
-		return fmt.Errorf("kernel image %s compile for %s; qemu expected arch: %s; use -arch opt", filepath.Base(kernelPath), kernelArch, app.config.Arch)
+	if kernelArch != cfg.Arch {
+		return fmt.Errorf("kernel image %s compile for %s; qemu expected arch: %s; use -arch opt", filepath.Base(kernelBundle.ContentPath), kernelArch, cfg.Arch)
 	}
 
-	if _, err = os.Stat(app.config.RootFSPath); err != nil {
-		app.config.RootFSPath, err = r.FetchPath(app.config.RootFSPath)
-		if err != nil {
-			return fmt.Errorf("can't resolve rootfs path: %w", err)
-		}
+	rootFSBundle, err := r.FetchPath(cfg.RootFSPath)
+	if err != nil {
+		return fmt.Errorf("can't resolve rootfs path: %w", err)
 	}
 
-	if app.config.InitRD {
-		app.config.rootFSFile, err = diskimg.CreateInitRDImage(app.config.RootFSPath)
-		if err != nil {
-			return fmt.Errorf("could not create initrd: %w", err)
-		}
-	} else {
-		app.config.rootFSFile, err = diskimg.CreateHardDiskImage(app.config.RootFSPath)
-		if err != nil {
-			return fmt.Errorf("could not create initrd: %w", err)
-		}
+	rootFSFile, err := diskimg.CreateRootDiskImage(rootFSBundle, cfg.InitRD, cfg.KeepDiskImageOnExit)
+	if err != nil {
+		return fmt.Errorf("could not create rootfs image: %w", err)
 	}
 
-	defer app.config.rootFSFile.Close()
+	defer rootFSFile.Close()
 
-	if !app.config.KeepDiskImageOnExit {
+	if !cfg.KeepDiskImageOnExit {
 		app.onShutdown = append(app.onShutdown, func(app *App) error {
-			return app.config.rootFSFile.Remove()
+			return rootFSFile.Remove()
 		})
 	}
 
-	if app.qemuArgs, err = app.config.BuildCmdArgs(); err != nil {
+	if app.qemuArgs, err = buildQemuCfg(cfg, rootFSFile); err != nil {
 		return fmt.Errorf("can't build command args: %w", err)
 	}
 
 	app.qemuArgs = append(app.qemuArgs, "-kernel", kernelPath)
+
+	krnParams, err := buildKernelBootParams(cfg, rootFSBundle)
+	if err != nil {
+		return fmt.Errorf("can't build kernel boot params: %w", err)
+	}
+
+	app.qemuArgs = append(app.qemuArgs, "-append", strings.Join(krnParams, " "))
 
 	return nil
 }

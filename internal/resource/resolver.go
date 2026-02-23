@@ -3,16 +3,21 @@ package resource
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 )
 
-type Fetcher interface {
-	ByURI(uri *url.URL) (string, error)
+type Bundle struct {
+	ContentPath  string
+	MetadataPath string
+	Type         string
 }
-type FetcherFn func(*url.URL) (string, error)
 
-func (r FetcherFn) ByURI(u *url.URL) (string, error) {
+type Fetcher interface {
+	ByURI(uri *url.URL) (Bundle, error)
+}
+type FetcherFn func(*url.URL) (Bundle, error)
+
+func (r FetcherFn) ByURI(u *url.URL) (Bundle, error) {
 	return r(u)
 }
 
@@ -23,14 +28,14 @@ func (r BySchemaFetchers) AddFetcher(schema string, fetcher Fetcher) {
 }
 
 var DefaultFetcher = BySchemaFetchers{
-	"file":  FetcherFn(FetchFilePath),
 	"https": FetcherFn(DownloadURL),
 }
 
-func (r BySchemaFetchers) FetchPath(uri string) (string, error) {
+func (r BySchemaFetchers) FetchPath(uri string) (Bundle, error) {
+	var bundle Bundle
 	resourceUri, err := url.Parse(uri)
 	if err != nil {
-		return "", fmt.Errorf("can't parse URI: %w", err)
+		return bundle, fmt.Errorf("can't parse URI: %w", err)
 	}
 
 	if resourceUri.Path == "" && resourceUri.Opaque != "" {
@@ -39,51 +44,30 @@ func (r BySchemaFetchers) FetchPath(uri string) (string, error) {
 	}
 
 	if resourceUri.Path == "" {
-		return "", fmt.Errorf("empty path of URI %s", uri)
+		return bundle, fmt.Errorf("empty path of URI %s", uri)
 	}
 
 	schema := resourceUri.Scheme
-	if schema == "" {
-		schema = "file"
+	if schema == "" || schema == "file" {
+		bundle.Type = "file"
+		bundle.ContentPath = resourceUri.Path
+
+		if absPath, err := filepath.Abs(resourceUri.Path); err == nil {
+			bundle.ContentPath = absPath
+		}
+
+		return bundle, nil
 	}
 
 	fetcher, ok := r[schema]
 	if !ok {
-		return "", fmt.Errorf("unsupported schema '%s' of URI %s\n", schema, uri)
+		return bundle, fmt.Errorf("unsupported schema '%s' of URI %s\n", schema, uri)
 	}
 
-	path, err := fetcher.ByURI(resourceUri)
+	bundle, err = fetcher.ByURI(resourceUri)
 	if err != nil {
-		return "", fmt.Errorf("can't fetch URI: %w", err)
+		return bundle, fmt.Errorf("can't fetch URI: %w", err)
 	}
 
-	return path, nil
-}
-
-func FetchFilePath(uri *url.URL) (string, error) {
-	path := uri.Path
-
-	if absPath, err := filepath.Abs(path); err == nil {
-		path = absPath
-	}
-
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", fmt.Errorf("can't find file path %s: %w", path, os.ErrNotExist)
-	}
-
-	if info.IsDir() {
-		files, err := os.ReadDir(path)
-		if err != nil {
-			return "", fmt.Errorf("can't read directory %s: %w", path, err)
-		}
-
-		if len(files) == 0 {
-			return "", fmt.Errorf("directory %s has no files", path)
-		}
-
-		return filepath.Join(path, files[0].Name()), nil
-	}
-
-	return path, nil
+	return bundle, nil
 }

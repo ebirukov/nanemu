@@ -10,9 +10,14 @@ import (
 	"path/filepath"
 )
 
-func DownloadURL(uri *url.URL) (string, error) {
+func DownloadURL(uri *url.URL) (Bundle, error) {
 	downloadPath := filepath.Join(fs.CfgDir(), "download", uri.Host, filepath.Dir(uri.Path))
 	os.MkdirAll(downloadPath, 0755)
+
+	bundle := Bundle{
+		ContentPath: downloadPath,
+		Type:        "web",
+	}
 
 	fName := filepath.Join(downloadPath, filepath.Base(uri.Path))
 
@@ -20,7 +25,7 @@ func DownloadURL(uri *url.URL) (string, error) {
 		if os.IsNotExist(err) {
 			fw, err := os.OpenFile(fName, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0755)
 			if err != nil {
-				return "", fmt.Errorf("can't create file %s: %w", fName, err)
+				return bundle, fmt.Errorf("can't create file %s: %w", fName, err)
 			}
 
 			defer fw.Close()
@@ -31,17 +36,17 @@ func DownloadURL(uri *url.URL) (string, error) {
 
 				return err
 			}); err != nil {
-				return "", fmt.Errorf("can't download %s: %w", uri, err)
+				return bundle, fmt.Errorf("can't download %s: %w", uri, err)
 			}
 
-			return downloadPath, err
+			return bundle, err
 		}
 		if err != nil {
-			return "", fmt.Errorf("can't stat %s: %w", fName, err)
+			return bundle, fmt.Errorf("can't stat %s: %w", fName, err)
 		}
 	}
 
-	return downloadPath, nil
+	return bundle, nil
 }
 
 func download(url string, fetch func(io.Reader) error) error {

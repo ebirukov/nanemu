@@ -10,12 +10,12 @@ import (
 func main() {
 	app := nanemu.NewApp(fs.CfgDir())
 
-	_, err := app.ParseCfg(os.Args)
+	cfg, err := app.ParseCfg(os.Args)
 	if err != nil {
 		log.Fatalf("can't parse config: %v", err)
 	}
 
-	if err := app.Init(); err != nil {
+	if err := app.Init(cfg); err != nil {
 		app.Shutdown()
 
 		log.Fatalf("failed to initialize app: %v", err)
