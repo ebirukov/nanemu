@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -28,8 +29,12 @@ func UnpackTo(src io.Reader, destPath string) error {
 			return err
 		}
 
-		switch header.Typeflag {
+		fType := header.Typeflag
+		if runtime.GOOS == "windows" && fType == tar.TypeSymlink {
+			fType = tar.TypeLink
+		}
 
+		switch fType {
 		case tar.TypeDir: // директория
 			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
 				return fmt.Errorf("create dir %s: %w", target, err)
@@ -39,9 +44,11 @@ func UnpackTo(src io.Reader, destPath string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return err
 			}
+
+			os.Remove(target)
 			fw, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
-				return fmt.Errorf("create file %s: %w", fw.Name(), err)
+				return fmt.Errorf("can't create file %s: %w", target, err)
 			}
 			if _, err := io.Copy(fw, tr); err != nil {
 				fw.Close()
@@ -53,6 +60,8 @@ func UnpackTo(src io.Reader, destPath string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("create dir for symlink %s: %w", target, err)
 			}
+
+			os.Remove(target)
 			if err := os.Symlink(header.Linkname, target); err != nil {
 				return fmt.Errorf("create symlink %s: %w", header.Linkname, err)
 			}
@@ -63,6 +72,8 @@ func UnpackTo(src io.Reader, destPath string) error {
 			if err != nil {
 				return err
 			}
+
+			os.Remove(target)
 			if err := os.Link(linkTarget, target); err != nil {
 				return err
 			}
