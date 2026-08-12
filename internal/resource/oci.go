@@ -4,15 +4,16 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"github.com/ebirukov/nanemu/fs"
-	"github.com/ebirukov/nanemu/pkg/repo"
-	"github.com/ebirukov/nanemu/pkg/tar"
-	spec "github.com/opencontainers/image-spec/specs-go/v1"
 	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ebirukov/nanemu/fs"
+	"github.com/ebirukov/nanemu/pkg/repo"
+	"github.com/ebirukov/nanemu/pkg/tar"
+	spec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 const DockerRegistryURL = "registry-1.docker.io"
@@ -171,7 +172,7 @@ func downloadManifest(cl *repo.Client, ref, arch string, manifest *spec.Manifest
 			}
 
 			return fmt.Errorf("can't find manifest in %v", idx)
-		case spec.MediaTypeImageManifest:
+		case spec.MediaTypeImageManifest, "application/vnd.docker.distribution.manifest.v2+json":
 			if err := json.NewDecoder(r).Decode(&manifest); err != nil {
 				return fmt.Errorf("can't decode manifest")
 			}
@@ -190,7 +191,7 @@ func downloadManifest(cl *repo.Client, ref, arch string, manifest *spec.Manifest
 func storeBlob(r io.Reader, desc spec.Descriptor, path string) error {
 	var err error
 
-	if desc.MediaType == spec.MediaTypeImageLayerGzip {
+	if desc.MediaType == spec.MediaTypeImageLayerGzip || desc.MediaType == "application/vnd.docker.image.rootfs.diff.tar.gzip" {
 		r, err = gzip.NewReader(r)
 		if err != nil {
 			return fmt.Errorf("failed decompress blob %s: %w", desc.Digest.Hex(), err)
@@ -198,7 +199,7 @@ func storeBlob(r io.Reader, desc spec.Descriptor, path string) error {
 	}
 
 	switch desc.MediaType {
-	case spec.MediaTypeImageLayerGzip, spec.MediaTypeImageLayer:
+	case spec.MediaTypeImageLayerGzip, spec.MediaTypeImageLayer, "application/vnd.docker.image.rootfs.diff.tar.gzip":
 		if err := tar.UnpackTo(r, path); err != nil {
 			return fmt.Errorf("can't unpack tar to %s: %w", path, err)
 		}

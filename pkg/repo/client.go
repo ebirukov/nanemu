@@ -4,12 +4,18 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/opencontainers/go-digest"
 	"io"
 	"net/http"
 	neturl "net/url"
 	"strings"
+
+	"github.com/opencontainers/go-digest"
 )
+
+const acceptManifests = "application/vnd.docker.distribution.manifest.v2+json," +
+	"application/vnd.docker.distribution.manifest.list.v2+json," +
+	"application/vnd.oci.image.manifest.v1+json," +
+	"application/vnd.oci.image.index.v1+json"
 
 type Client struct {
 	httpCli     *http.Client
@@ -36,7 +42,7 @@ func NewClient(repoName string, registryURL string) *Client {
 // GetManifest загружает json (index или manifest) из CAS реестра по ref (hash или имя репозитория)
 func (cl *Client) GetManifest(ref string, fetch func(string, io.Reader) error) error {
 	path, _ := neturl.JoinPath(cl.registryURL, cl.repoName, "manifests", ref)
-	resp, err := cl.HttpGet(path)
+	resp, err := cl.HttpGet(path, acceptManifests)
 	if err != nil {
 		return fmt.Errorf("can't get manifest: %w", err)
 	}
@@ -51,7 +57,7 @@ func (cl *Client) DownloadBlob(digest digest.Digest, fetch func(io.Reader) error
 	rURL, _ := neturl.JoinPath(cl.registryURL, cl.repoName, "blobs", digest.String())
 	resp, err := cl.HttpGet(rURL)
 	if err != nil {
-		return fmt.Errorf("failed get layer %s: %w", digest.Hex(), err)
+		return fmt.Errorf("failed get layer %s from %s: %w", digest, rURL, err)
 	}
 
 	defer resp.Body.Close()

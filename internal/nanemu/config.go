@@ -3,6 +3,7 @@ package nanemu
 import (
 	"flag"
 	"fmt"
+	"github.com/ebirukov/nanemu/internal/config"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -30,7 +31,7 @@ type Config struct {
 	Memory string
 	Smp    string
 
-	localDir string
+	Default config.Default
 }
 
 type KernelBootParams struct {
@@ -62,8 +63,8 @@ func (cfg *Config) Parse(args []string) error {
 	opts.BoolVar(&cfg.Version, "v", false, "version")
 	opts.BoolVar(&showHelp, "h", false, "show help")
 	opts.StringVar(&cfg.Arch, "arch", runtime.GOARCH, "Platform architecture")
-	opts.StringVar(&cfg.KernelURI, "kernel", getEnv("KERNEL_PATH", ""), "Path to linux kernel image (default $KERNEL_PATH)")
-	opts.StringVar(&cfg.RootFSPath, "rootfs", "", "Deprecated. Path to initramfs root directory")
+	opts.StringVar(&cfg.KernelURI, "kernel", getEnv("KERNEL_PATH", cfg.Default.KernelURI), "Path to linux kernel image (default $KERNEL_PATH)")
+	opts.StringVar(&cfg.RootFSPath, "rootfs", cfg.Default.RootFSPath, "Deprecated. Path to initramfs root directory")
 	opts.BoolVar(&cfg.InitRD, "initrd", false, "Create initramfs image and use as kernel rootfs")
 	opts.BoolVar(&cfg.KeepDiskImageOnExit, "keep-disk", false, "keep disk image file on exit")
 	opts.BoolVar(&cfg.FailOnPanic, "fail-on-panic", true, "Fail on kernel panic")
@@ -82,7 +83,7 @@ func (cfg *Config) Parse(args []string) error {
 		opts.PrintDefaults()
 	}
 
-	if err := cfg.QemuExtCfgArgs.Init(cfg.localDir); err != nil {
+	if err := cfg.QemuExtCfgArgs.Init(cfg.Default.LocalDir); err != nil {
 		return fmt.Errorf("init qemu args: %w", err)
 	}
 
@@ -116,7 +117,11 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	if cfg.KernelURI == "" {
-		cfg.KernelURI = FallbackKernelURI
+		fmt.Fprintf(opts.Output(), "kernel path not specified\n")
+
+		opts.Usage()
+
+		os.Exit(0)
 	}
 
 	// -rootfs flag backward support

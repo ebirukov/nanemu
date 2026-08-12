@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ebirukov/nanemu/internal/config"
 	"github.com/ebirukov/nanemu/internal/diskimg"
 	"github.com/ebirukov/nanemu/internal/resource"
 	"github.com/ebirukov/nanemu/internal/text"
@@ -31,10 +32,10 @@ type App struct {
 	err        error
 }
 
-func NewApp(cfgDir string) *App {
+func NewApp(defaults config.Default) *App {
 	return &App{
 		config: &Config{
-			localDir: cfgDir,
+			Default: defaults,
 		},
 		stop: make(chan struct{}),
 	}

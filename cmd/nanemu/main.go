@@ -2,13 +2,20 @@ package main
 
 import (
 	"github.com/ebirukov/nanemu/fs"
+	"github.com/ebirukov/nanemu/internal/config"
 	"github.com/ebirukov/nanemu/internal/nanemu"
 	"log"
 	"os"
 )
 
 func main() {
-	app := nanemu.NewApp(fs.CfgDir())
+	defaults := config.Default{
+		LocalDir:   fs.CfgDir(),
+		RootFSPath: "oci://registry-1.docker.io/library/alpine",
+		KernelURI:  "oci://registry-1.docker.io/ebirukov/linux-kernel",
+	}
+
+	app := nanemu.NewApp(defaults)
 
 	cfg, err := app.ParseCfg(os.Args)
 	if err != nil {
