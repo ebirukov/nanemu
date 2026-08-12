@@ -1,71 +1,96 @@
 # nanemu
 
-**nanemu** — минималистичная обертка для упрощения запуска на ядре Linux ELF-бинарников в QEMU.
+**nanemu** — минималистичная обёртка для упрощения запуска ELF-бинарников на ядре Linux в QEMU.
 
 Проект предназначен для:
-- ⚙️ Запуск кода на ядре Linux с минимальной настройкой (нужен только путь к папке с бинарями)
-- 🔬 Тестирования кода использующего низкоуровневые механизмы ОС, такие как eBPF, системные вызовы и т.п.
-- 🧪 Отладки поведения кода, поведение которого зависит от архитектуры и версии ядра Linux
+
+- ⚙️ Запуска кода на ядре Linux в ОС linux/macos/windows
+- 🔬 Тестирования кода, использующего низкоуровневые механизмы ОС — eBPF, системные вызовы и т.п.
+- 🧪 Отладки поведения кода, зависящего от архитектуры и версии ядра Linux
 
 ⚡ **Субсекундное время запуска** на хост-системах с аппаратной поддержкой виртуализации и минималистичным ядром Linux.
 
 ---
 
+## Содержание
+
+- [Быстрый старт](#быстрый-старт)
+- [Передача пути к ядру Linux](#передача-пути-к-ядру-linux-в-аргументах-запуска)
+- [Поддерживаемые форматы образов файловой системы](#поддерживаемые-форматы-образов-файловой-системы)
+- [Примеры использования](#примеры-использования)
+- [Параметры](#параметры)
+- [Переменные окружения](#переменные-окружения)
+- [Особенности](#особенности)
+- [Пример: запуск собственной программы](#пример-запуск-собственной-программы)
+- [Расширения (extensions)](#-расширения-extensions)
+
+---
+
 ## Быстрый старт
 
-1. **Установите QEMU**
+### 1. Установите QEMU
 
 Для Alpine / Debian / Ubuntu:
 
 ```bash
 sudo apt install qemu-system qemu-user-static
-````
+```
 
 Официальная документация: [QEMU installation guide](https://www.qemu.org/download/)
 
-2. **Установите `nanemu`**
+### 2. Установите `nanemu`
 
 ```bash
 GOBIN=$GOPATH/bin go install github.com/ebirukov/nanemu/cmd/nanemu@latest
 ```
 
-3. **Запуск example/build/hello-amd64:**
-   ```bash
-   # Установка:
-   GOOS=linux GOARCH=amd64 go build -o example/build/hello-amd64 ./cmd/hello
+### 3. Запустите пример `example/build/hello-amd64`
 
-   # Запуск:
-   nanemu -initrd example/build/hello-$(go env GOARCH)
-   ```
+```bash
+# Сборка:
+GOOS=linux GOARCH=amd64 go build -o example/build/hello-amd64 ./cmd/hello
 
+# Запуск:
+nanemu -initrd example/build/hello-$(go env GOARCH)
+```
+
+---
 
 ## Передача пути к ядру Linux в аргументах запуска
 
-- Локальный файл, предварительно скачанный например с [https://dl-cdn.alpinelinux.org/alpine/edge/releases/](https://dl-cdn.alpinelinux.org/alpine/edge/releases/)
-  ```bash
-  nanemu -kernel /путь/к/ядру example/build/hello-amd64
-  ```
+**Локальный файл**, предварительно скачанный, например, с [dl-cdn.alpinelinux.org](https://dl-cdn.alpinelinux.org/alpine/edge/releases/):
 
-- URL-адрес файла
+```bash
+nanemu -kernel /путь/к/ядру example/build/hello-amd64
+```
 
-    ```bash
-  nanemu -kernel https://dl-cdn.alpinelinux.org/alpine/edge/releases/x86_64/netboot-3.9.0/vmlinuz-vanilla -initrd example/build/hello-amd64
-  ```
+**URL-адрес файла**:
+
+```bash
+nanemu -kernel https://dl-cdn.alpinelinux.org/alpine/edge/releases/x86_64/netboot-3.9.0/vmlinuz-vanilla \
+  -initrd example/build/hello-amd64
+```
+
+---
 
 ## Поддерживаемые форматы образов файловой системы
 
-1. **Локальный путь**:
-   ```bash
-   nanemu example/build/hello-amd64
-   ```
-   
-2. **Содержимое Docker-образ**:
-   - формат OCI совместимого репозитория`oci://[image-registry]/repository/image:tag`
+**1. Локальный путь:**
+
+```bash
+nanemu example/build/hello-amd64
+```
+
+**2. Содержимое Docker-образа:**
+
+- Формат OCI-совместимого репозитория `oci://[image-registry]/repository/image:tag`
+
   ```bash
   nanemu -initrd oci://quay.io/lifebitai/ubuntu:18.10 bash
   ```
-   - формат для репозитория docker.com `docker://[repository]/image:tag`
- 
+
+- Формат для репозитория docker.com `docker://[repository]/image:tag`
+
   ```bash
   nanemu -initrd docker:///alpine
   ```
@@ -74,25 +99,25 @@ GOBIN=$GOPATH/bin go install github.com/ebirukov/nanemu/cmd/nanemu@latest
 
 ## Примеры использования
 
-🔧 **Запуск одиночного файла init:**default
+### 🔧 Запуск одиночного файла init (по умолчанию)
 
 ```bash
 nanemu rootfs/init
 ```
 
 ```bash
-nanemu -kernel kernel/arm64/linux-5.10.0-32-arm64 -arch arm64 rootfs/ init
+nanemu -kernel kernel/arm64/linux-5.10.0-32-arm64 -arch arm64 rootfs/init
 ```
 
-🖥 **Запуск с кастомными параметрами:**
+### 🖥 Запуск с кастомными параметрами
 
 ```bash
 QEMU_BIN=/usr/bin/qemu-system-amd64 \
 KERNEL_ARGS="initrd=/mybin cma=0 audit=0 nowatchdog nosmp maxcpus=1 ipv6.disable=1 net.ifnames=0 lsm= acpi=off ima_appraise=off" \
 nanemu \
   -kernel kernel/amd64/linux-6.1.0-35-amd64 \
-  -arch arm64
-  -timeout 10s
+  -arch arm64 \
+  -timeout 10s \
   build/amd64/initramfs
 ```
 
@@ -100,56 +125,56 @@ nanemu \
 
 ## Параметры
 
-| Флаг         | Тип        | Описание                                                                      |
-|--------------|------------|-------------------------------------------------------------------------------|
-| `-kernel`    | `string`   | Путь к образу ядра Linux (обязательный, либо ENV `KERNEL_PATH`)           |
-| `-arch`      | `string`   | Целевая архитектура (по умолчанию: `GOARCH`)                                |
-| `-timeout`   | `duration` | Максимальное время выполнения QEMU (по умолчанию: `0` - без ограничения)     |
-| `-loglevel`  | `string`   | Уровень логирования при загрузке ядра (по умолчанию: `3`)                     |
-| `-initrd`    | `bool`     | Создать образ диска инициализации `initramfs` (cpio)                          |
-| `-memory`    | `string`   | Размер памяти для QEMU                                                        |
-| `-smp`       | `string`   | Ядра процессора для QEMU                                                      |
-| `-s`         | `string`   | Серийный порт (стандартно: `mon:stdio`)                                      |
-| `-t`         | `bool`     | Псевдотерминал                                                                |
-| `-i`         | `bool`     | Интерактивный режим (по умолчанию: `false` на Windows)                      |
-| `-e`         | `string`   | Пары переменных окружения KEY=VALUE (может использовать несколько экземпляров) |
-| `-fail-on-panic` | `bool`   | Завершение при панике (по умолчанию: `true`)                              |
-| `-keep-disk` | `bool`     | Сохранить диск после завершения                                              |
+| Флаг              | Тип        | Описание                                                                        |
+|-------------------|------------|----------------------------------------------------------------------------------|
+| `-kernel`         | `string`   | Путь к образу ядра Linux (обязательный, либо через переменную `KERNEL_PATH`)    |
+| `-arch`           | `string`   | Целевая архитектура (по умолчанию: `GOARCH`)                                    |
+| `-timeout`        | `duration` | Максимальное время выполнения QEMU (по умолчанию: `0` — без ограничения)        |
+| `-loglevel`       | `string`   | Уровень логирования при загрузке ядра (по умолчанию: `3`)                       |
+| `-initrd`         | `bool`     | Создать образ диска инициализации `initramfs` (cpio)                            |
+| `-memory`         | `string`   | Размер памяти для QEMU                                                          |
+| `-smp`            | `string`   | Количество ядер процессора для QEMU                                             |
+| `-s`              | `string`   | Серийный порт (по умолчанию: `mon:stdio`)                                       |
+| `-t`              | `bool`     | Псевдотерминал                                                                   |
+| `-i`              | `bool`     | Интерактивный режим (по умолчанию: `false` на Windows)                          |
+| `-e`              | `string`   | Пары переменных окружения `KEY=VALUE` (флаг можно указывать несколько раз)      |
+| `-fail-on-panic`  | `bool`     | Завершать выполнение при панике ядра (по умолчанию: `true`)                     |
+| `-keep-disk`      | `bool`     | Сохранить временный диск после завершения                                       |
 
 ---
 
 ## Переменные окружения
 
-| Переменная    | Описание                                                               |
-| ------------- | ---------------------------------------------------------------------- |
-| `QEMU_BIN`    | Путь к исполняемому файлу QEMU (**по умолчанию:** `qemu-system-$ARCH`) |
-| `QEMU_ARGS`   | Дополнительные аргументы, передаваемые напрямую в QEMU                 |
-| `KERNEL_ARGS` | Дополнительные параметры загрузки ядра                                 |
+| Переменная    | Описание                                                                |
+|---------------|--------------------------------------------------------------------------|
+| `QEMU_BIN`    | Путь к исполняемому файлу QEMU (по умолчанию: `qemu-system-$ARCH`)      |
+| `QEMU_ARGS`   | Дополнительные аргументы, передаваемые напрямую в QEMU                  |
+| `KERNEL_ARGS` | Дополнительные параметры загрузки ядра                                  |
 
 ---
 
 ## Особенности
 
-* 🚀 Автоматическое использование аппаратной поддержки виртуализации
-* 🏗 Автоматически создаёт временный образ диска с фалйовой системой `ext4` (при наличии модуля ядра VIRTIO_BLK), либо `initramfs` (в формате `cpio`)
-* 🧼 Автоматическая очистка временных файлов после завершения
-* 🛠 Поддержка ОС linux/macos/windows, архитектур `amd64` и `arm64`
+- 🚀 Автоматическое использование аппаратной поддержки виртуализации
+- 🏗 Автоматическое создание временного образа диска: `ext4` (при наличии модуля ядра `VIRTIO_BLK`) либо `initramfs` в формате `cpio`
+- 🧼 Автоматическая очистка временных файлов после завершения
+- 🛠 Поддержка ОС Linux / macOS / Windows и архитектур `amd64`, `arm64`
 
 ---
 
 ## Пример: запуск собственной программы
 
-1. Пример программы hello Linux:
+### 1. Пример программы `hello` для Linux
 
-   ```go
-   package main
+```go
+package main
 
-   import (
-       "fmt"
-       "os"
-       "syscall"
-       "unsafe"
-   )
+import (
+	"fmt"
+	"os"
+	"syscall"
+	"unsafe"
+)
 
 func main() {
 	var uts syscall.Utsname
@@ -163,16 +188,15 @@ func main() {
 }
 ```
 
-2. Скомпилируем под нужную архитектуру:
+### 2. Соберите под нужную архитектуру
 
 ```bash
 GOOS=linux GOARCH=arm64 go build -o build/hello-arm64 ./cmd/hello
 ```
 
-3. Запускаем с помощью `nanemu`:
+### 3. Запустите с помощью `nanemu`
 
 ```bash
-
 nanemu \
   -kernel https://dl-cdn.alpinelinux.org/alpine/edge/releases/aarch64/netboot/vmlinuz-virt \
   -arch arm64 \
@@ -181,9 +205,9 @@ nanemu \
   example/build/hello-arm64
 ```
 
-4. Пример вывода:
+### 4. Пример вывода
 
-```
+```text
 2026/01/26 12:49:47 executing: /usr/bin/qemu-system-arm64 -serial mon:stdio -machine virt -cpu cortex-a53 -nographic -no-reboot -append rdinit=/hello-arm64 console=ttyAMA0 loglevel=6 -kernel kernel/vmlinuz-5.4.43-1-arm64 -initrd ./initramfs.cpio718173793
 2026/01/26 12:49:47 process /usr/bin/qemu-system-arm64 started with pid: 2177874
 [    0.000000] Linux version 6.18.7-0-virt (buildozer@build-edge-aarch64) (cc (Alpine 15.2.0) 15.2.0, GNU ld (GNU Binutils) 2.45.1) #1-Alpine SMP PREEMPT_DYNAMIC 2026-01-26 12:49:47
@@ -193,11 +217,13 @@ Hello from process 1 on linux kernel version: 6.18.7-0-virt
 2026/02/22 14:15:02 exit with code: 0
 ```
 
+---
 
 ## 🧩 Расширения (`extensions`)
 
 Механизм **extensions** позволяет динамически расширять параметры запуска `nanemu`, добавляя собственные опции QEMU без изменения исходного кода.
-Каждое расширение представляет собой отдельный файл в каталоге:
+
+Каждое расширение — это отдельный файл в каталоге:
 
 ```
 $HOME/.nanemu/extension/
@@ -205,59 +231,43 @@ $HOME/.nanemu/extension/
 
 Имя файла определяет **флаг запуска**, а содержимое файла — **шаблон аргументов**, добавляемых при выполнении QEMU.
 
----
-
 ### Как это работает
 
-При старте `nanemu` сканирует папку:
+При старте `nanemu` сканирует папку `$HOME/.nanemu/extension/`. Для каждого найденного файла создаётся дополнительный CLI-флаг. При указании этого флага при запуске `nanemu` содержимое файла автоматически подставляется в параметры QEMU.
 
-```
-$HOME/.nanemu/extension/
-```
-
-Для каждого найденного файла создаётся дополнительный CLI-флаг.
-При указании этого флага при запуске `nanemu`, его содержимое автоматически подставляется в параметры QEMU.
-
-Пример:
-файл `console-unix` создаёт флаг `-console-unix`.
-Если при запуске `nanemu` указать этот флаг, в QEMU будут добавлены аргументы из содержимого файла.
-
----
+Пример: файл `console-unix` создаёт флаг `-console-unix`. Если при запуске `nanemu` указать этот флаг, в QEMU будут добавлены аргументы из содержимого файла.
 
 ### 🧱 Пример: создание собственного расширения
 
-1. Создайте каталог для расширений (если его ещё нет):
+**1.** Создайте каталог для расширений (если его ещё нет):
 
-   ```bash
-   mkdir -p $HOME/.nanemu/extension
-   ```
+```bash
+mkdir -p $HOME/.nanemu/extension
+```
 
-2. Добавьте файл `console-unix` со следующим содержимым:
+**2.** Добавьте файл `console-unix` со следующим содержимым:
 
-   ```bash
-   # Подключение UNIX-сокета для консоли
-   -chardev socket,path=%s,server=on,wait=off,id=unix0
-   -device virtio-serial-pci
-   -device virtserialport,chardev=unix0,name=unix.sock
-   ```
+```bash
+# Подключение UNIX-сокета для консоли
+-chardev socket,path=%s,server=on,wait=off,id=unix0
+-device virtio-serial-pci
+-device virtserialport,chardev=unix0,name=unix.sock
+```
 
-3. Запустите `nanemu`, указав новый флаг:
+**3.** Запустите `nanemu`, указав новый флаг:
 
-   ```bash
-   GOOS=linux GOARCH=amd64 go build -o example/build/hello-amd64 ./cmd/hello
-   ```
+```bash
+GOOS=linux GOARCH=amd64 go build -o example/build/hello-amd64 ./cmd/hello
+nanemu -console-unix /tmp/nanemu.sock example/build/hello-amd64
+```
 
-   👉 В результате `nanemu` автоматически добавит указанные строки в параметры запуска QEMU.
-
----
+👉 В результате `nanemu` автоматически добавит указанные строки в параметры запуска QEMU.
 
 ### ⚙️ Формат файла расширения
 
-Каждый файл может содержать одну или несколько строк — шаблонов аргументов QEMU.
-В шаблоне можно использовать подстановку `%s` — она будет заменена на значение, переданное через одноимённый CLI-флаг.
+Каждый файл может содержать одну или несколько строк — шаблонов аргументов QEMU. В шаблоне можно использовать подстановку `%s` — она будет заменена на значение, переданное через одноимённый CLI-флаг.
 
-**Пример:**
-файл `$HOME/.nanemu/extension/port-fwd`
+**Пример:** файл `$HOME/.nanemu/extension/port-fwd`
 
 ```bash
 # Проброс TCP-порта
@@ -278,12 +288,9 @@ nanemu -kernel vmlinuz -rootfs build -port-fwd tcp::8080-:22
 -device virtio-net-pci,netdev=net0
 ```
 
----
-
 ### 🧠 Дополнительные возможности
 
-* Расширения можно создавать под разные архитектуры, добавив суффикс в имени файла.
-  Например:
+- Расширения можно создавать под разные архитектуры, добавив суффикс в имени файла, например:
 
   ```
   usernet-amd64
@@ -292,14 +299,10 @@ nanemu -kernel vmlinuz -rootfs build -port-fwd tcp::8080-:22
 
   В этом случае флаг `-usernet` будет активен только при запуске на соответствующей архитектуре.
 
-* Комментарии внутри файла (`#` или `//`) автоматически попадают в описание флага и отображаются при `-h`.
-
----
+- Комментарии внутри файла (`#` или `//`) автоматически попадают в описание флага и отображаются при `-h`.
 
 ### 📋 Примеры готовых расширений
 
-| Имя файла      | Назначение                                        |
-|----------------| ------------------------------------------------- |
-| `net`          | Конфигурация встроенной NAT-сети QEMU (user mode) |
-
----
+| Имя файла | Назначение                                          |
+|-----------|------------------------------------------------------|
+| `net`     | Конфигурация встроенной NAT-сети QEMU (user mode)    |
