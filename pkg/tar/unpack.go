@@ -10,9 +10,18 @@ import (
 	"strings"
 )
 
+// pendingLink — жёсткая ссылка, отложенная до конца распаковки (её цель может
+// встретиться в архиве позже самой ссылки).
+type pendingLink struct {
+	target     string
+	linkTarget string
+}
+
 // UnpackTo распаковывает архив в директорию destPath
 func UnpackTo(src io.Reader, destPath string) error {
 	tr := tar.NewReader(src)
+
+	var pending []pendingLink
 
 	for {
 		header, err := tr.Next()
@@ -67,19 +76,25 @@ func UnpackTo(src io.Reader, destPath string) error {
 			}
 
 		case tar.TypeLink:
-			// жёсткая ссылка
+			// жёсткая ссылка. Цель может встретиться позже в архиве, поэтому
+			// создание ссылки откладываем до конца распаковки.
 			linkTarget, err := safeJoin(destPath, header.Linkname)
 			if err != nil {
 				return err
 			}
 
-			os.Remove(target)
-			if err := os.Link(linkTarget, target); err != nil {
-				return err
-			}
+			pending = append(pending, pendingLink{target: target, linkTarget: linkTarget})
 
 		default:
 			fmt.Printf("skip unsupported entry: %s\n", header.Name)
+		}
+	}
+
+	// второй проход: создаём жёсткие ссылки, когда все файлы уже распакованы
+	for _, l := range pending {
+		os.Remove(l.target)
+		if err := os.Link(l.linkTarget, l.target); err != nil {
+			return err
 		}
 	}
 

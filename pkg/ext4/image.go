@@ -1,13 +1,16 @@
 package ext4
 
 import (
+	"archive/tar"
 	"errors"
 	"fmt"
-	"github.com/ebirukov/nanemu/pkg/cpio"
+	"io"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/ebirukov/nanemu/pkg/fsutil"
 
 	"github.com/pilat/go-ext4fs"
 )
@@ -33,6 +36,8 @@ func CopyFrom(srcDir string, img *ext4fs.Image, execPermBits int) (total int64, 
 	inodes := map[string]uint32{
 		"/": ext4fs.RootInode,
 	}
+	// ключ (inode) -> созданный inode, для детекции хардлинков
+	hardlinks := map[fsutil.Inode]uint32{}
 
 	defer func() {
 		err = img.Save()
@@ -88,23 +93,29 @@ func CopyFrom(srcDir string, img *ext4fs.Image, execPermBits int) (total int64, 
 				return err
 			}
 		case info.Mode().IsRegular():
-			if execPermBits > 0 {
-				if isExec, _ := cpio.IsExecutableFile(hostPath); isExec {
-					fmt.Printf("file %s permision mode flags %v", info.Name(), info.Mode())
-					execMode := info.Mode() | fs.FileMode(execPermBits)
-					fmt.Printf(" was modified to %v\n", execMode)
-					mode = uint16(execMode.Perm())
+			if key, ok := fsutil.InodeKeyOf(info); ok {
+				if targetInode, seen := hardlinks[key]; seen {
+					if err := img.Link(parentInode, d.Name(), targetInode); err != nil {
+						return err
+					}
+					return nil
 				}
 			}
+
+			mode = restoreExecMode(hostPath, execPermBits, info)
 
 			data, err := os.ReadFile(hostPath)
 			if err != nil {
 				return err
 			}
 
-			_, err = img.CreateFile(parentInode, d.Name(), data, mode, 0, 0)
+			fileInode, err := img.CreateFile(parentInode, d.Name(), data, mode, 0, 0)
 			if err != nil {
 				return err
+			}
+
+			if key, ok := fsutil.InodeKeyOf(info); ok {
+				hardlinks[key] = fileInode
 			}
 
 			total += info.Size()
@@ -118,4 +129,88 @@ func CopyFrom(srcDir string, img *ext4fs.Image, execPermBits int) (total int64, 
 
 	return
 
+}
+
+func restoreExecMode(hostPath string, execPermBits int, info fs.FileInfo) uint16 {
+	mode := uint16(info.Mode().Perm())
+
+	if execPermBits > 0 {
+		if isExec, _ := fsutil.IsExecutableFile(hostPath); isExec {
+			fmt.Printf("file %s permision mode flags %v", info.Name(), info.Mode())
+			execMode := info.Mode() | fs.FileMode(execPermBits)
+			fmt.Printf(" was modified to %v\n", execMode)
+			mode = uint16(execMode.Perm())
+		}
+	}
+	return mode
+}
+
+func extractTarToExt4(r io.Reader, img *ext4fs.Image, inodes map[string]uint32) (int64, error) {
+	tr := tar.NewReader(r)
+
+	var total int64
+	tarInodes := make(map[string]uint32)
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return total, err
+		}
+
+		name := path.Clean("/" + hdr.Name)
+		parent := path.Dir(name)
+
+		parentInode, ok := inodes[parent]
+		if !ok {
+			return total, err
+		}
+
+		mode := uint16(hdr.Mode)
+
+		switch hdr.Typeflag {
+
+		case tar.TypeDir:
+			inode, err := img.CreateDirectory(parentInode, path.Base(name), mode, 0, 0)
+			if err != nil {
+				return total, err
+			}
+			tarInodes[hdr.Name] = inode
+
+		case tar.TypeReg:
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				return total, err
+			}
+
+			inode, err := img.CreateFile(parentInode, path.Base(name), data, mode, 0, 0)
+			if err != nil {
+				return total, err
+			}
+
+			tarInodes[hdr.Name] = inode
+			total += hdr.Size
+
+		case tar.TypeSymlink:
+			_, err := img.CreateSymlink(parentInode, path.Base(name), hdr.Linkname, 0, 0)
+			if err != nil {
+				return total, err
+			}
+
+		case tar.TypeLink: // hard link
+			/*			targetInode, ok := tarInodes[hdr.Linkname]
+						if !ok {
+							return total, fmt.Errorf("hardlink target not found: %s", hdr.Linkname)
+						}
+
+						_, err := img.CreateHardLink(parentInode, path.Base(name), targetInode)
+						if err != nil {
+							return total, err
+						}*/
+		}
+	}
+
+	return total, nil
 }

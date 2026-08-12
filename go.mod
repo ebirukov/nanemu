@@ -8,7 +8,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/pilat/go-ext4fs v0.0.0-20260101164550-1eff41061a06
+	github.com/pilat/go-ext4fs v1.0.2
 	golang.org/x/sys v0.40.0
 	golang.org/x/term v0.39.0
 )

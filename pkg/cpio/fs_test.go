@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/cavaliergopher/cpio"
+	"github.com/ebirukov/nanemu/pkg/fsutil"
 )
 
 func TestCreate(t *testing.T) {
@@ -206,15 +207,21 @@ func TestHardlinks(t *testing.T) {
 		t.Fatalf("failed to create hardlink: %v", err)
 	}
 
+	// на платформах без поддержки inode (Windows) хардлинки не распознаются
+	if _, ok := fsutil.InodeKeyOf(mustStat(t, filePath)); !ok {
+		t.Skip("platform does not expose inode info")
+	}
+
 	// создаём cpio архив
 	var buf bytes.Buffer
 	if err := Create(&buf, tmpDir, 0); err != nil {
 		t.Fatalf("Create() failed: %v", err)
 	}
 
+	// все имена, относящиеся к файлу file.txt (включая хардлинк file2.txt)
+	// должны разделять один inode
 	r := cpio.NewReader(&buf)
-	inodes := map[int64][]*cpio.Header{}
-
+	byName := map[string]*cpio.Header{}
 	for {
 		h, err := r.Next()
 		if err == io.EOF {
@@ -223,34 +230,34 @@ func TestHardlinks(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		inodes[h.Inode] = append(inodes[h.Inode], h)
+		byName[h.Name] = h
 	}
 
-	for _, files := range inodes {
-		if len(files) < 2 {
-			continue
-		}
-
-		var orig *cpio.Header
-		for _, f := range files {
-			if f.Size != 0 { // оригинал имеет ненулевой размер
-				orig = f
-				break
-			}
-		}
-
-		if orig == nil {
-			t.Errorf("expected one original file with Size>0, got none")
-			continue
-		}
-
-		for _, f := range files {
-			if f != orig {
-				if f.Size != 0 {
-					t.Errorf("expected Size=0 for hardlink %q, got %d", f.Name, f.Size)
-				}
-			}
-		}
+	orig, ok := byName["file.txt"]
+	if !ok {
+		t.Fatal("file.txt not found in archive")
+	}
+	link, ok := byName["file2.txt"]
+	if !ok {
+		t.Fatal("file2.txt not found in archive")
 	}
 
+	if orig.Size == 0 {
+		t.Errorf("original file.txt must carry content (Size>0), got %d", orig.Size)
+	}
+	if link.Size != 0 {
+		t.Errorf("hardlink file2.txt must have Size=0, got %d", link.Size)
+	}
+	if orig.Inode != link.Inode {
+		t.Errorf("file.txt and file2.txt must share inode, got %d vs %d", orig.Inode, link.Inode)
+	}
+}
+
+func mustStat(t *testing.T, path string) os.FileInfo {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	return info
 }

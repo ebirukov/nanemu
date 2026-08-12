@@ -1,12 +1,13 @@
 package cpio
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/cavaliergopher/cpio"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/ebirukov/nanemu/pkg/fsutil"
 )
 
 // Create writes a CPIO archive containing the directory tree rooted at rootDir
@@ -79,7 +80,7 @@ func Create(out io.Writer, root string, execPermBits int) error {
 	archive := cpio.NewWriter(out)
 	defer archive.Close()
 
-	seen := make(map[fileKey]string)
+	seen := make(map[fsutil.Inode]string)
 
 	if !info.IsDir() {
 		// root is single file
@@ -95,7 +96,7 @@ func Create(out io.Writer, root string, execPermBits int) error {
 	})
 }
 
-func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, execPermBits int, seen map[fileKey]string) error {
+func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, execPermBits int, seen map[fsutil.Inode]string) error {
 	name, err := filepath.Rel(dir, path)
 	if err != nil {
 		return fmt.Errorf("cpio: could not determine relative path for %s: %w", path, err)
@@ -113,7 +114,7 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 	hdr.Name = name
 
 	// Unix, Linux, macOS
-	if key, ok := inodeKey(info); ok {
+	if key, ok := fsutil.InodeKeyOf(info); ok {
 		if prev, seenBefore := seen[key]; seenBefore {
 			hdr.Linkname = prev
 			hdr.Size = 0
@@ -125,7 +126,7 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 	}
 
 	if info.Mode().IsRegular() && execPermBits > 0 {
-		isExec, err := IsExecutableFile(path)
+		isExec, err := fsutil.IsExecutableFile(path)
 		if err != nil {
 			return err
 		}
@@ -164,43 +165,4 @@ func addFileToArchive(archive *cpio.Writer, dir, path string, info os.FileInfo, 
 	}
 
 	return nil
-}
-
-func IsExecutableFile(path string) (bool, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false, nil
-	}
-
-	header := make([]byte, 4)
-	if !info.Mode().IsRegular() || info.Size() < int64(len(header)) {
-		return false, nil
-	}
-
-	file, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer file.Close()
-
-	if _, err := file.Read(header); err != nil {
-		return false, fmt.Errorf("can't read %s header: %w", path, err)
-	}
-
-	switch {
-	// ELF
-	case bytes.Equal(header[:4], []byte{0x7F, 'E', 'L', 'F'}):
-		return true, nil
-	// script
-	case bytes.Equal(header[:2], []byte{'#', '!'}):
-		return true, nil
-	default:
-	}
-
-	return false, nil
-}
-
-type fileKey struct {
-	Ino   int64
-	Nlink int
 }
