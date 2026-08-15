@@ -1,0 +1,110 @@
+# CodeRabbit Configuration
+# Free AI code review settings for nanemu project
+
+# General settings
+reviews:
+  # Enable reviews on all pull requests
+  enabled: true
+  
+  # Auto-request review on PR creation
+  auto_request: true
+  
+  # Maximum files to review per PR
+  max_files: 100
+  
+  # Maximum lines to review per file
+  max_lines_per_file: 500
+
+# Review settings
+review_settings:
+  # Paths to exclude from review
+  skip_paths:
+    - "vendor/**"
+    - "node_modules/**"
+    - ".git/**"
+    - "*.pb.go"
+    - "**/*.min.js"
+    - "**/*.min.css"
+  
+  # Focus areas for code review
+  focus_areas:
+    - "code quality"
+    - "security"
+    - "performance"
+    - "best practices"
+    - "error handling"
+    - "testing"
+  
+  # Language-specific settings
+  language_settings:
+    go:
+      # Review Go test files
+      review_tests: true
+      # Focus on concurrency issues
+      check_concurrency: true
+      # Check for error handling
+      check_error_handling: true
+    
+    markdown:
+      # Review documentation
+      review_docs: true
+
+# Comments and feedback
+comments:
+  # Post inline comments for issues found
+  enable_inline_comments: true
+  
+  # Group similar issues
+  group_by_file: true
+  
+  # Only comment on new code (not existing)
+  comment_only_new_code: true
+  
+  # Tone of comments
+  tone: "professional"
+
+# Auto-suggestions
+suggestions:
+  # Enable auto-fix suggestions
+  enable: true
+  
+  # Types of suggestions
+  suggest_improvements: true
+  suggest_refactoring: true
+  suggest_security_fixes: true
+
+# Performance optimization
+performance:
+  # Priority files to review first
+  priority_files:
+    - "*.go"
+    - "go.mod"
+    - "Makefile"
+    - "**.md"
+  
+  # Skip large files (in lines)
+  skip_large_files: 2000
+
+# Integration settings
+integration:
+  # Post summary comment
+  post_summary: true
+  
+  # Request review from bot
+  request_review: true
+  
+  # Update review on new commits
+  update_on_commits: true
+
+# Quality gates
+quality_gates:
+  # Minimum required review coverage (%)
+  min_review_coverage: 80
+  
+  # Block merge if critical issues found
+  block_on_critical: false
+
+# Notifications
+notifications:
+  # Notify on review completion
+  notify_on_completion: true
